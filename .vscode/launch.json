@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug",
+      "program": "${workspaceRoot}/target/debug/${workspaceFolderBasename}",
+      "args": ["127.0.0.1:5223"],
+      "cwd": "${workspaceRoot}",
+      "sourceLanguages": ["rust"]
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+[package]
+name = "tidal_osc_viz"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rosc = "0.9.1"
+crossterm = "0.26.1"
+termsize = "0.1"
