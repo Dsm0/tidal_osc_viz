@@ -1,9 +1,11 @@
 extern crate rosc;
 
+use crossterm::{terminal, ExecutableCommand};
 use rosc::OscPacket;
 // use rosc::OscType;
 
 use std::env;
+use std::io::stdout;
 use std::net::{SocketAddrV4, UdpSocket};
 use std::str::FromStr;
 
@@ -16,6 +18,10 @@ mod dirt_display;
 fn main() {
     let args: Vec<String> = env::args().collect();
     let usage = format!("Usage {} IP:PORT", &args[0]);
+    
+    let _ = stdout().execute(terminal::Clear(terminal::ClearType::FromCursorDown));
+    let mut messages_recieved: usize = 0;
+
     if args.len() < 2 {
         println!("{}", usage);
         ::std::process::exit(1)
@@ -25,14 +31,16 @@ fn main() {
         Err(_) => panic!("{}", usage),
     };
     let sock = UdpSocket::bind(addr).unwrap();
-    println!("Listening to {}", addr);
+    // println!("Listening to {}", addr);
 
     let mut buf = [0u8; rosc::decoder::MTU];
 
     loop {
         match sock.recv_from(&mut buf) {
             Ok((size, _addr)) => {
-                // println!("Received packet with size {} from: {}", size, addr);
+                messages_recieved = messages_recieved + 1;
+                // println!("packet size: {} from: {}", size, addr);
+                println!("messages recieved: {}", messages_recieved);
                 let (_, packet) = rosc::decoder::decode_udp(&buf[..size]).unwrap();
                 handle_packet(packet);
             }
@@ -55,7 +63,7 @@ fn handle_packet(packet: OscPacket) {
             dirt_display::display_dirt_message(dirt_message);
         }
         OscPacket::Bundle(bundle) => {
-            println!("OSC Bundle: {:?}", bundle);
+            // println!("OSC Bundle: {:?}", bundle);
         }
     }
 }
