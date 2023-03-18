@@ -3,14 +3,12 @@
 
 // use rosc::OscType;
 
-use crate::params::DirtValue;
 use crate::params::DirtMessage;
+use crate::params::DirtValue;
 // use crate::params::DirtDisplayMap;
 
+use crossterm::{cursor, terminal, ExecutableCommand};
 use std::io::{stdout, Write};
-use crossterm::{
-    cursor, terminal, ExecutableCommand
-};
 
 use crossterm::terminal::size;
 
@@ -19,15 +17,13 @@ use std::cmp;
 use crate::string_constants::BAR_CHARS;
 use crate::string_constants::BOX;
 
-
-
 // NOTE: will probably replace when I get to using a tui library
 fn display_text(msg: String) {
     let mut stdout = stdout();
     stdout.execute(cursor::Hide).unwrap();
     let _ = stdout.execute(terminal::Clear(terminal::ClearType::FromCursorDown));
-    let _ = writeln!(stdout,"{}",msg);
-    let _ = stdout.execute(cursor::MoveTo(0,0));
+    let _ = writeln!(stdout, "{}", msg);
+    let _ = stdout.execute(cursor::MoveTo(0, 0));
     let _ = stdout.execute(cursor::Show).unwrap();
 
     msg.to_owned().clear();
@@ -38,102 +34,140 @@ fn display_text(msg: String) {
 // so if d1 updates more frequently than d2,
 // it won't drown out all the d2 messages from being displayed
 
-fn float_mod(f : f32,m : f32) -> f32 {
+fn float_mod(f: f32, m: f32) -> f32 {
     ((f % m) + m) % m
 }
 
-pub fn display_dirt_message(msg : DirtMessage) {
+pub fn display_dirt_message(msg: DirtMessage) {
 
-    let mut display_string = String::new();
+    //    match msg.get("_id_") {
+    //        Some(DirtValue::DS(s)) => if (s == "tick") {return ()} else {},
+    //        _ => ()
+    //    }
 
-//    match msg.get("_id_") {
-//        Some(DirtValue::DS(s)) => if (s == "tick") {return ()} else {},
-//        _ => ()
-//    }
+    let mut display_str = String::new();
+
+    let mut display_float =
+        |param_name: &str, display_func: fn(f32) -> String| match msg.get(param_name) {
+            Some(DirtValue::DF(f)) => display_str.push_str(&display_func(*f)),
+            _ => display_str.push_str(&format!("\n")),
+        };
+
+    let mut display_int=
+        |param_name: &str, display_func: fn(i32) -> String| match msg.get(param_name) {
+            Some(DirtValue::DI(i)) => display_str.push_str(&display_func(*i)),
+            _ => display_str.push_str(&format!("\n")),
+        };
+
 
     // metronome display
-    match msg.get("cycle") {
-        Some(DirtValue::DF(f)) => {
+    display_float("cycle", |f| {
+        let bar = display_bar_float(f - f.floor(), 0.0, 1.0);
+        let what = format!(
+            "{}/8 {}/16 {}/24 {}/32 {}/40 {}/48 {}/56 {}/64",
+            float_mod(f, 8.0).floor() + 1.0,
+            float_mod(f, 2.0 * 8.0).floor() + 1.0,
+            float_mod(f, 3.0 * 8.0).floor() + 1.0,
+            float_mod(f, 4.0 * 8.0).floor() + 1.0,
+            float_mod(f, 5.0 * 8.0).floor() + 1.0,
+            float_mod(f, 6.0 * 8.0).floor() + 1.0,
+            float_mod(f, 7.0 * 8.0).floor() + 1.0,
+            float_mod(f, 8.0 * 8.0).floor() + 1.0
+        );
+        format!("{}\n {}\n", bar, what)
+    });
 
-            let bar = display_bar_float(f - f.floor(), 0.0, 1.0);
+    display_float("gain", |f| {
+            let val_str = display_bar_float(f, 0.0, 2.0);
+            format!("{:<6} {}\n", "gain", val_str)
+    });
 
-            let what = format!("{}/8 {}/16 {}/24 {}/32 {}/40 {}/48 {}/56 {}/64"
-                            , float_mod(*f,8.0).floor() + 1.0
-                            , float_mod(*f,2.0*8.0).floor() + 1.0
-                            , float_mod(*f,3.0*8.0).floor() + 1.0
-                            , float_mod(*f,4.0*8.0).floor() + 1.0
-                            , float_mod(*f,5.0*8.0).floor() + 1.0
-                            , float_mod(*f,6.0*8.0).floor() + 1.0
-                            , float_mod(*f,7.0*8.0).floor() + 1.0
-                            , float_mod(*f,8.0*8.0).floor() + 1.0
-                            );
+    display_float("amp", |f| {
+            let val_str = display_bar_float(f, 0.0, 2.0);
+            format!("{:<6} {}\n", "amp", val_str)
+    });
 
-            let huh = format!("{}\n {}\n", bar , what);
+    display_float("pan", |f| {
+            let val_str = display_bar_float(f, 0.0, 1.0);
+            format!("{:<6} {}\n", "pan", val_str)
+    });
 
-            display_string.push_str(huh.as_ref())
-        },
-        _ => ()
-    }
+    display_float("n", |f| {
+            format!("{:<6} {}\n", "n", f.to_string())
+    });
+
+    display_float("begin", |f| {
+            let val_str = display_bar_float(f, 0.0, 1.0);
+            format!("{:<6} {}\n", "begin", val_str)
+    });
+
+    display_float("end", |f| {
+            let val_str = display_bar_float(f, 0.0, 1.0);
+            format!("{:<6} {}\n", "end", val_str)
+    });
 
 
-    for (param_name,value) in msg {
+    display_float("hcutoff", |f| {
+            let val_str = display_bar_float(f, 0.0, 20000.0);
+            format!("{}{}\n", "hcutoff", val_str)
+    });
 
+    display_float("cutoff", |f| {
+            let val_str = display_bar_float(f, 0.0, 20000.0);
+            format!("{:<6} {}\n", "cutoff", val_str)
+    });
+
+    display_str.push_str("\n-------------------------------------\n");
+
+    for (param_name, value) in msg {
         let val_str = match value {
             DirtValue::DF(f) => {
                 match param_name.as_ref() {
-                    "gain" => display_bar_float(f,0.0,2.0),
-                    "n" => format!("{}",f.to_string()),
-                    "pan" => display_bar_float(f,0.0,1.0),
-                    "begin" => display_bar_float(f,0.0,1.0),
-                    "end" => display_bar_float(f,0.0,1.0),
-                    "att" => display_bar_float(f,0.0,1.0),
-                    "rel" => display_bar_float(f,0.0,4.0),
-                    "hcutoff" => display_bar_float(f,0.0,20000.0),
-                    "cutoff" => display_bar_float(f,0.0,20000.0),
-                    "speed" =>  display_bar_float(f,-10.0,10.0),
+                    // "gain" => display_bar_float(f, 0.0, 2.0),
+                    // "n" => format!("{}", f.to_string()),
+                    // "pan" => display_bar_float(f, 0.0, 1.0),
+                    // "begin" => display_bar_float(f,0.0,1.0),
+                    // "end" => display_bar_float(f,0.0,1.0),
+                    "att" => display_bar_float(f, 0.0, 1.0),
+                    "rel" => display_bar_float(f, 0.0, 4.0),
+                    // "hcutoff" => display_bar_float(f, 0.0, 20000.0),
+                    // "cutoff" => display_bar_float(f, 0.0, 20000.0),
+                    "speed" => display_bar_float(f, -10.0, 10.0),
                     "cycle" => format!(""),
                     "delta" => format!(""),
                     _ => {
-                        // println!("{}", param_name);
-                        display_bar_float(f,0.0,20.0)
-                    },
-
+                        format!(": {}", f)
+                    }
                 }
             }
-            DirtValue::DI(i) => {
-                match param_name {
-                    _ => display_bar_int(i,0,10)
-                }
+            DirtValue::DI(i) => match param_name {
+                _ => display_bar_int(i, 0, 10),
             },
-            DirtValue::DS(s) => {
-                match param_name {
-                    _ => s.to_string()
-                }
-            }
+            DirtValue::DS(s) => match param_name {
+                _ => s.to_string(),
+            },
         };
 
-        display_string.push_str(&format!("{:<6} {}\n", shorten_name(&param_name), val_str));
+        display_str.push_str(&format!("{:<6} {}\n", shorten_name(&param_name), val_str));
     }
 
-    display_text(display_string);
-
+    display_text(display_str);
 }
 
-
-fn shorten_name(name : &str) -> String {
-    let huh : String = name.chars().take(6).collect();
+fn shorten_name(name: &str) -> String {
+    let huh: String = name.chars().take(6).collect();
     huh
 }
 
-
-pub fn display_param_float(name : String, f : f32) -> String {
+#[inline]
+pub fn display_param_float(name: String, f: f32) -> String {
     let display_name = shorten_name(&name);
     match name.as_str() {
         "gain" => {
             let bar = "#".repeat((f * 10.0) as usize);
-            format!("{:<8} : {:}",display_name,bar)
+            format!("{:<8} : {:}", display_name, bar)
         }
-        _ => format!("{:<8} : {:<8}",display_name,f)
+        _ => format!("{:<8} : {:<8}", display_name, f),
     }
 }
 
@@ -144,7 +178,6 @@ pub fn display_param_float(name : String, f : f32) -> String {
 //     }
 // }
 
-
 // pub fn display_param_int(name : String, i : i32) -> String{
 //     let display_name = shorten_name(&name);
 //     match name.as_str() {
@@ -152,25 +185,24 @@ pub fn display_param_float(name : String, f : f32) -> String {
 //     }
 // }
 
-
-fn remap_range(s : f32, l1: f32, h1 :f32, l2: f32, h2: f32) -> f32 {
-    l2 + (s-l1) * (h2-l2) / (h1-l1)
+fn remap_range(s: f32, l1: f32, h1: f32, l2: f32, h2: f32) -> f32 {
+    l2 + (s - l1) * (h2 - l2) / (h1 - l1)
 }
 
-fn get_box_string(val : usize) -> String {
+fn get_box_string(val: usize) -> String {
     if val == 0 {
-        return "".to_string()
+        return "".to_string();
     }
 
-    let (val_div, val_mod) = (val / BAR_CHARS.len() , val % BAR_CHARS.len());
+    let (val_div, val_mod) = (val / BAR_CHARS.len(), val % BAR_CHARS.len());
 
     BOX.repeat(val_div) + BAR_CHARS[val_mod as usize]
 }
 
-pub fn display_bar_float(f : f32, min: f32, max: f32) -> String {
+pub fn display_bar_float(f: f32, min: f32, max: f32) -> String {
     let cols = {
-        if let Ok((cols,rows)) = size() {
-            // the - 25 is just to make sure the string 
+        if let Ok((cols, rows)) = size() {
+            // the - 25 is just to make sure the string
             // doesn't wrap around the term when it's printed
             cmp::max((cols as i32) - 25, 1 as i32) as usize
         } else {
@@ -183,24 +215,22 @@ pub fn display_bar_float(f : f32, min: f32, max: f32) -> String {
     let bar_string_index: usize = val.round() as usize;
 
     let bar = get_box_string(bar_string_index);
-    format!("{:>3}:{:0width$}:{:<4}",min,bar,max, width = cols) 
-                                                                        //
+    format!("{:>3}:{:0width$}:{:<4}", min, bar, max, width = cols)
+    //
 }
 
-
-pub fn display_bar_int(i : i32, min: i32, max: i32) -> String {
-    let termsize::Size {rows, cols: _} = termsize::get().unwrap();
+pub fn display_bar_int(i: i32, min: i32, max: i32) -> String {
+    let termsize::Size { rows, cols: _ } = termsize::get().unwrap();
 
     let cols = {
-        if let Ok((cols,rows)) = size() {
+        if let Ok((cols, rows)) = size() {
             cmp::max((cols as i32) - 25, 1 as i32)
         } else {
             1
         }
     };
 
-    let debug_str = format!("{:?}",(min..max).collect::<Vec<i32>>());
-
+    let debug_str = format!("{:?}", (min..max).collect::<Vec<i32>>());
 
     debug_str
 }
