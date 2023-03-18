@@ -9,3 +9,5 @@ you should definitely be passing around &str
 
 TODO: refactor to minimize memory usage/allocations,
 should definitely do before you build out the app
+
+put one hash map on the stack and update that map every message
