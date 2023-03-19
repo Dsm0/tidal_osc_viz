@@ -14,6 +14,7 @@ pub enum DirtValue {
 pub trait GetDirtValue {
     fn display_i32(&self, param_name: &str, display_func: fn(&i32) -> String) -> String;
     fn display_f32(&self, param_name: &str, display_func: fn(&f32) -> String) -> String;
+    fn display_string(&self, param_name: &str, display_func: fn(&String) -> String) -> String;
     fn display_raw(&self) -> String;
 }
 
@@ -22,7 +23,7 @@ impl GetDirtValue for &DirtMessage {
         match self.get(param_name) {
             Some(DirtValue::DI(i)) => display_func(i),
             Some(x) => panic!("called display_i32 on DirtValue other than DirtValue::DI(i32)"),
-            _ => "".to_string(),
+            _ => "\n".to_string(),
         }
     }
 
@@ -30,7 +31,15 @@ impl GetDirtValue for &DirtMessage {
         match self.get(param_name) {
             Some(DirtValue::DF(f)) => display_func(f),
             Some(x) => panic!("called display_f32 on DirtValue other than DirtValue::DF(f32)"),
-            _ => "".to_string(),
+            _ => "\n".to_string(),
+        }
+    }
+
+    fn display_string(&self, param_name: &str, display_func: fn(&String) -> String) -> String {
+        match self.get(param_name) {
+            Some(DirtValue::DS(s)) => display_func(s),
+            Some(x) => panic!("called display_f32 on DirtValue other than DirtValue::DF(f32)"),
+            _ => "\n".to_string(),
         }
     }
 
@@ -43,7 +52,7 @@ impl GetDirtValue for &DirtMessage {
                 DirtValue::DS(s) => huh.push(format!("{}: {}", param_name, s)),
             }
         }
-        huh.join("\n")
+        huh.join(",")
     }
 }
 

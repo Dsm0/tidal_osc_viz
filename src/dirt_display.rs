@@ -56,21 +56,44 @@ pub fn display_dirt_message(msg: &DirtMessage) {
                 float_mod(*f, 7.0 * 8.0).floor() + 1.0,
                 float_mod(*f, 8.0 * 8.0).floor() + 1.0
             );
-            format!("{}\n {}\n", bar, what)
+            format!("{}\n {}", bar, what)
+        })
+        .as_str(),
+    );
+
+    display_str.push_str(
+        msg.display_f32("delta", |f| {
+            format!(" | delta: {}\n", f.to_string())
+        })
+        .as_str(),
+    );
+
+    display_str.push_str(
+        msg.display_string("s", |s| {
+            format!("s: {}\n", s)
+        })
+        .as_str(),
+    );
+
+
+    display_str.push_str(
+        msg.display_i32("orbit", |i| {
+            format!("orbit: {}\n", display_bar_int(i, 0, 9))
         })
         .as_str(),
     );
 
     display_str.push_str(
         msg.display_f32("gain", |f| {
-            format!("gain: {}\n", display_bar_float(f, 0.0, 2.0))
+            format!("gain : {}\n", display_bar_float(f, 0.0, 2.0))
         })
         .as_str(),
     );
 
+
     display_str.push_str(
         msg.display_f32("amp", |f| {
-            format!("amp: {}\n", display_bar_float(f, 0.0, 2.0))
+            format!("amp : {}\n", display_bar_float(f, 0.0, 2.0))
         })
         .as_str(),
     );
@@ -99,7 +122,30 @@ pub fn display_dirt_message(msg: &DirtMessage) {
 
     display_str.push_str(
         msg.display_f32("end", |f| {
-            format!("end: {}\n", display_bar_float(f, 0.0, 1.0))
+            format!("end  : {}\n", display_bar_float(f, 0.0, 1.0))
+        })
+        .as_str(),
+    );
+
+
+    display_str.push_str(
+        msg.display_f32("speed", |f| {
+            format!("speed  : {}\n", display_bar_float(f, -10.0, 10.0))
+        })
+        .as_str(),
+    );
+
+    display_str.push_str(
+        msg.display_f32("release", |f| {
+            format!("rel : {}\n", display_bar_float(f, 0.0, 4.0))
+        })
+        .as_str(),
+    );
+
+
+    display_str.push_str(
+        msg.display_i32("cut", |i| {
+            format!("cut: {}\n\n", display_bar_int(i, -1, 8))
         })
         .as_str(),
     );
@@ -192,7 +238,7 @@ pub fn display_bar_float(f: &f32, min: f32, max: f32) -> String {
     //
 }
 
-pub fn display_bar_int(i: i32, min: i32, max: i32) -> String {
+pub fn display_bar_int(i: &i32, min: i32, max: i32) -> String {
     let termsize::Size { rows, cols: _ } = termsize::get().unwrap();
 
     let cols = {
@@ -203,7 +249,16 @@ pub fn display_bar_int(i: i32, min: i32, max: i32) -> String {
         }
     };
 
-    let debug_str = format!("{:?}", (min..max).collect::<Vec<i32>>());
+    let mut temp_str = String::new();
 
-    debug_str
+    for j in (min..max) {
+        if (*i == j) {
+            temp_str.push_str(format!("##{}##",j).as_str())
+        } else {
+            temp_str.push_str(format!(" {} ",j).as_str())
+        }
+
+    }
+
+    temp_str
 }
