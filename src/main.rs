@@ -4,6 +4,10 @@ use crossterm::{terminal, ExecutableCommand};
 use rosc::OscPacket;
 // use rosc::OscType;
 
+use crate::params::DirtMessage;
+use crate::params::DirtData;
+
+use std::collections::HashMap;
 use std::env;
 use std::io::stdout;
 use std::net::{SocketAddrV4, UdpSocket};
@@ -35,13 +39,15 @@ fn main() {
 
     let mut buf = [0u8; rosc::decoder::MTU];
 
+    let mut dirt_data: Vec<DirtMessage> = vec![HashMap::new()];
+
     loop {
         match sock.recv_from(&mut buf) {
             Ok((size, _addr)) => {
                 bytes_recieved = bytes_recieved + size;
                 println!("bytes recieved: {} total from {}", bytes_recieved, _addr);
                 let (_, packet) = rosc::decoder::decode_udp(&buf[..size]).unwrap();
-                handle_packet(packet);
+                handle_packet(packet,&mut dirt_data);
             }
             Err(e) => {
                 println!("Error receiving from socket: {}", e);
@@ -49,17 +55,19 @@ fn main() {
             }
         }
     }
+
 }
 
-fn handle_packet(packet: OscPacket) {
+fn handle_packet(packet: OscPacket, dirt_data: &mut DirtData) {
     match packet {
         OscPacket::Message(msg) => {
             // println!("OSC address: {}", msg.addr);
             // println!("OSC arguments: {:?}", msg.args);
 
-            let dirt_message: params::DirtMessage = params::to_dirt_message(msg.args);
+            // let dirt_message: params::DirtMessage = 
+            params::update_dirt_data(dirt_data,msg.args);
 
-            dirt_display::display_dirt_message(&dirt_message);
+            dirt_display::display_dirt_data(&dirt_data);
         }
         OscPacket::Bundle(bundle) => {
             // println!("OSC Bundle: {:?}", bundle);
