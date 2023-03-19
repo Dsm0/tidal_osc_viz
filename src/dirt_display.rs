@@ -3,6 +3,7 @@
 
 // use rosc::OscType;
 
+use crate::params::DirtData;
 use crate::params::DirtMessage;
 use crate::params::DirtValue;
 use crate::params::GetDirtValue;
@@ -37,6 +38,10 @@ fn display_text(msg: &String) {
 
 fn float_mod(f: f32, m: f32) -> f32 {
     ((f % m) + m) % m
+}
+
+pub fn display_dirt_data(data: &DirtData) {
+    display_dirt_message(&data[0]);
 }
 
 pub fn display_dirt_message(msg: &DirtMessage) {
