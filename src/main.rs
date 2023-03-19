@@ -20,7 +20,7 @@ fn main() {
     let usage = format!("Usage {} IP:PORT", &args[0]);
     
     let _ = stdout().execute(terminal::Clear(terminal::ClearType::FromCursorDown));
-    let mut messages_recieved: usize = 0;
+    let mut bytes_recieved: usize = 0;
 
     if args.len() < 2 {
         println!("{}", usage);
@@ -38,9 +38,8 @@ fn main() {
     loop {
         match sock.recv_from(&mut buf) {
             Ok((size, _addr)) => {
-                messages_recieved = messages_recieved + 1;
-                // println!("packet size: {} from: {}", size, addr);
-                println!("messages recieved: {}", messages_recieved);
+                bytes_recieved = bytes_recieved + size;
+                println!("bytes recieved: {} total from {}", bytes_recieved, _addr);
                 let (_, packet) = rosc::decoder::decode_udp(&buf[..size]).unwrap();
                 handle_packet(packet);
             }
