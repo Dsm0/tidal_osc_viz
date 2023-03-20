@@ -26,7 +26,7 @@ impl GetDirtValue for &DirtMessage {
     fn display_i32(&self, param_name: &str, display_func: fn(&i32) -> String) -> String {
         match self.get(param_name) {
             Some(DirtValue::DI(i)) => display_func(i),
-            Some(x) => panic!("called display_i32 on DirtValue other than DirtValue::DI(i32)"),
+            Some(_x) => panic!("called display_i32 on DirtValue other than DirtValue::DI(i32)"),
             _ => "".to_string(),
         }
     }
@@ -34,7 +34,7 @@ impl GetDirtValue for &DirtMessage {
     fn display_f32(&self, param_name: &str, display_func: fn(&f32) -> String) -> String {
         match self.get(param_name) {
             Some(DirtValue::DF(f)) => display_func(f),
-            Some(x) => panic!("called display_f32 on DirtValue other than DirtValue::DF(f32)"),
+            Some(_x) => panic!("called display_f32 on DirtValue other than DirtValue::DF(f32)"),
             _ => "".to_string(),
         }
     }
@@ -42,7 +42,7 @@ impl GetDirtValue for &DirtMessage {
     fn display_string(&self, param_name: &str, display_func: fn(&String) -> String) -> String {
         match self.get(param_name) {
             Some(DirtValue::DS(s)) => display_func(s),
-            Some(x) => panic!("called display_f32 on DirtValue other than DirtValue::DF(f32)"),
+            Some(_x) => panic!("called display_f32 on DirtValue other than DirtValue::DF(f32)"),
             _ => "".to_string(),
         }
     }

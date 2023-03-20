@@ -4,12 +4,11 @@ use crossterm::{terminal, ExecutableCommand};
 use rosc::OscPacket;
 // use rosc::OscType;
 
-use crate::params::DirtMessage;
+// use crate::params::DirtMessage;
 use crate::params::DirtData;
 
 use std::collections::HashMap;
 use std::env;
-use std::hash::Hash;
 use std::io::stdout;
 use std::net::{SocketAddrV4, UdpSocket};
 use std::str::FromStr;
@@ -72,7 +71,7 @@ fn handle_packet(packet: OscPacket, dirt_data: &mut DirtData) {
 
             dirt_display::display_dirt_data(dirt_data);
         }
-        OscPacket::Bundle(bundle) => {
+        OscPacket::Bundle(_bundle) => {
             // println!("OSC Bundle: {:?}", bundle);
         }
     }

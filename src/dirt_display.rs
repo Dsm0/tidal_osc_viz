@@ -5,7 +5,6 @@
 
 use crate::params::DirtData;
 use crate::params::DirtMessage;
-use crate::params::DirtValue;
 use crate::params::GetDirtValue;
 // use crate::params::DirtDisplayMap;
 
@@ -43,7 +42,9 @@ pub fn display_dirt_data(dirt_data: &DirtData) {
 
     let mut full_str = String::new();
 
-    for (id, msg) in dirt_data {
+    // TODO: sort keys first
+
+    for (_id, msg) in dirt_data {
         let huh = display_dirt_message(msg);
         full_str.push_str(huh.as_str());
     }
@@ -192,23 +193,6 @@ fn display_dirt_message(msg: &DirtMessage) -> String {
     display_str.to_string()
 }
 
-fn shorten_name(name: &str) -> String {
-    let huh: String = name.chars().take(6).collect();
-    huh
-}
-
-#[inline]
-pub fn display_param_float(name: String, f: f32) -> String {
-    let display_name = shorten_name(&name);
-    match name.as_str() {
-        "gain" => {
-            let bar = "#".repeat((f * 10.0) as usize);
-            format!("{:<8} : {:}", display_name, bar)
-        }
-        _ => format!("{:<8} : {:<8}", display_name, f),
-    }
-}
-
 // pub fn display_param_str(name : String, s : String) -> String {
 //     let display_name = shorten_name(&name);
 //     match name.as_str() {
@@ -239,7 +223,7 @@ fn get_box_string(val: usize) -> String {
 
 pub fn display_bar_float(f: &f32, min: f32, max: f32) -> String {
     let cols = {
-        if let Ok((cols, rows)) = size() {
+        if let Ok((cols, _rows)) = size() {
             // the - 25 is just to make sure the string
             // doesn't wrap around the term when it's printed
             cmp::max((cols as i32) - 25, 1 as i32) as usize
@@ -258,10 +242,9 @@ pub fn display_bar_float(f: &f32, min: f32, max: f32) -> String {
 }
 
 pub fn display_bar_int(i: &i32, min: i32, max: i32) -> String {
-    let termsize::Size { rows, cols: _ } = termsize::get().unwrap();
 
     let cols = {
-        if let Ok((cols, rows)) = size() {
+        if let Ok((cols, _rows)) = size() {
             cmp::max((cols as i32) - 25, 1 as i32)
         } else {
             1
@@ -270,8 +253,8 @@ pub fn display_bar_int(i: &i32, min: i32, max: i32) -> String {
 
     let mut temp_str = String::new();
 
-    for j in (min..max) {
-        if (*i == j) {
+    for j in min..max {
+        if *i == j {
             temp_str.push_str(format!("##{}##",j).as_str())
         } else {
             temp_str.push_str(format!(" {} ",j).as_str())
