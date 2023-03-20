@@ -28,7 +28,6 @@ fn display_text(msg: &String) {
     let _ = stdout.execute(cursor::MoveTo(0, 0));
     let _ = stdout.execute(cursor::Show).unwrap();
 
-    msg.to_owned().clear();
 }
 
 // where basically everything happens
@@ -40,17 +39,33 @@ fn float_mod(f: f32, m: f32) -> f32 {
     ((f % m) + m) % m
 }
 
-pub fn display_dirt_data(data: &DirtData) {
-    display_dirt_message(&data[0]);
+pub fn display_dirt_data(dirt_data: &DirtData) {
+
+    let mut full_str = String::new();
+
+    for (id, msg) in dirt_data {
+        let huh = display_dirt_message(msg);
+        full_str.push_str(huh.as_str());
+    }
+
+    display_text(&full_str);
+
 }
 
-pub fn display_dirt_message(msg: &DirtMessage) {
+fn display_dirt_message(msg: &DirtMessage) -> String {
     let display_str: &mut String = &mut String::new();
+
+    display_str.push_str(
+        msg.display_string("_id_", |s| {
+            format!("id: {}\n", s.to_string())
+        })
+        .as_str(),
+    );
 
     display_str.push_str(
         msg.display_f32("cycle", |f| {
             let bar = display_bar_float(&(f - f.floor()), 0.0, 1.0);
-            let what = format!(
+            let cycle_mods = format!(
                 "{}/8 {}/16 {}/24 {}/32 {}/40 {}/48 {}/56 {}/64",
                 float_mod(*f, 8.0).floor() + 1.0,
                 float_mod(*f, 2.0 * 8.0).floor() + 1.0,
@@ -61,7 +76,7 @@ pub fn display_dirt_message(msg: &DirtMessage) {
                 float_mod(*f, 7.0 * 8.0).floor() + 1.0,
                 float_mod(*f, 8.0 * 8.0).floor() + 1.0
             );
-            format!("{}\n {}", bar, what)
+            format!("{}\n {}", bar, cycle_mods)
         })
         .as_str(),
     );
@@ -172,10 +187,9 @@ pub fn display_dirt_message(msg: &DirtMessage) {
 
     display_str.push_str("\n-------------------------------------\n");
 
-    display_str.push_str(msg.display_raw().as_str());
+    // display_str.push_str(msg.display_raw().as_str());
 
-
-    display_text(display_str);
+    display_str.to_string()
 }
 
 fn shorten_name(name: &str) -> String {

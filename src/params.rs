@@ -20,14 +20,14 @@ pub trait GetDirtValue {
 
 pub type DirtParamName = String;
 pub type DirtMessage = HashMap<DirtParamName, DirtValue>;
-pub type DirtData = Vec<DirtMessage>;
+pub type DirtData = HashMap<String, DirtMessage>;
 
 impl GetDirtValue for &DirtMessage {
     fn display_i32(&self, param_name: &str, display_func: fn(&i32) -> String) -> String {
         match self.get(param_name) {
             Some(DirtValue::DI(i)) => display_func(i),
             Some(x) => panic!("called display_i32 on DirtValue other than DirtValue::DI(i32)"),
-            _ => "\n".to_string(),
+            _ => "".to_string(),
         }
     }
 
@@ -35,7 +35,7 @@ impl GetDirtValue for &DirtMessage {
         match self.get(param_name) {
             Some(DirtValue::DF(f)) => display_func(f),
             Some(x) => panic!("called display_f32 on DirtValue other than DirtValue::DF(f32)"),
-            _ => "\n".to_string(),
+            _ => "".to_string(),
         }
     }
 
@@ -43,7 +43,7 @@ impl GetDirtValue for &DirtMessage {
         match self.get(param_name) {
             Some(DirtValue::DS(s)) => display_func(s),
             Some(x) => panic!("called display_f32 on DirtValue other than DirtValue::DF(f32)"),
-            _ => "\n".to_string(),
+            _ => "".to_string(),
         }
     }
 
@@ -66,18 +66,18 @@ impl GetDirtValue for &DirtMessage {
 // type DirtParamDisplay = fn(DirtValue) -> String;
 // pub type DirtDisplayMap = HashMap<DirtParamName,DirtDisplay>;
 
-fn get_param_name(osc_param: OscType) -> DirtParamName {
+fn get_param_name(osc_param: &OscType) -> DirtParamName {
     match osc_param {
-        OscType::String(s) => s,
+        OscType::String(s) => s.to_string(),
         _ => panic!("passed non-string type OscType to 'get_param_name'"),
     }
 }
 
-pub fn to_dirt_value(osc_value: OscType) -> DirtValue {
+pub fn to_dirt_value(osc_value: &OscType) -> DirtValue {
     match osc_value {
-        OscType::Float(f) => DirtValue::DF(f),
-        OscType::Int(i) => DirtValue::DI(i),
-        OscType::String(s) => DirtValue::DS(s),
+        OscType::Float(f) => DirtValue::DF(*f),
+        OscType::Int(i) => DirtValue::DI(*i),
+        OscType::String(s) => DirtValue::DS(s.to_string()),
         _ => panic!("oscValue not float, integer, or string"),
     }
 }
@@ -87,33 +87,55 @@ pub fn to_dirt_message(msg: Vec<OscType>) -> DirtMessage {
     for i in (0..msg.len()).step_by(2) {
         let param = &msg[i];
         let val = &msg[i + 1];
-
-        let param_name = get_param_name(param.clone());
-        let dirt_value = to_dirt_value(val.clone());
-
+        let param_name = get_param_name(param);
+        let dirt_value = to_dirt_value(val);
         dirt_message.insert(param_name, dirt_value);
     }
     dirt_message
 }
 
-fn update_dirt_message(dirt_message: &mut DirtMessage, new_msg: Vec<OscType>) {
+fn update_dirt_message(mut dirt_message: DirtMessage, new_msg: Vec<OscType>) {
+    // let stream_id = "";
+    dirt_message.clear();
     for i in (0..new_msg.len()).step_by(2) {
         let param = &new_msg[i];
         let val = &new_msg[i + 1];
 
-        let param_name = get_param_name(param.clone());
-        let dirt_value = to_dirt_value(val.clone());
+        let param_name = get_param_name(param);
+        let dirt_value = to_dirt_value(val);
 
-        dirt_message.insert(param_name, dirt_value);
+        dirt_message.insert(param_name.to_string(), dirt_value);
     }
+    // stream_id
 }
 
+pub fn update_dirt_data(dirt_data: &mut DirtData, new_msg: Vec<OscType>) {
+    let id: String = get_id(new_msg[0].to_owned(), new_msg[1].to_owned());
 
+    if let Some(mut old_dirt_msg) = dirt_data.get(&id) {
+        // update_dirt_message(old_dirt_msg, new_msg)
 
-pub fn update_dirt_data(dirt_data: &mut DirtData, new_msg: Vec<OscType>){
+        dirt_data.insert(id, to_dirt_message(new_msg));
+    } else {
+        dirt_data.insert(id, to_dirt_message(new_msg));
+    }
 
-    let mut old_message = &mut dirt_data[0];
+}
 
-    update_dirt_message(&mut old_message,new_msg)
+fn get_id(msg0: OscType, msg1: OscType) -> String {
+    let param = if let OscType::String(s) = msg0 {
+        s
+    } else {
+        panic!("index 0 of message should be a string")
+    };
 
+    if param.as_str() != "_id_" {
+        panic!("index 0 of message should be '__id__' but it's {}", param)
+    }
+
+    if let OscType::String(id) = msg1 {
+        id
+    } else {
+        panic!("index 1 of message should be a string")
+    }
 }
