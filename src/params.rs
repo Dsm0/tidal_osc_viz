@@ -112,6 +112,10 @@ fn update_dirt_message(mut dirt_message: DirtMessage, new_msg: Vec<OscType>) {
 pub fn update_dirt_data(dirt_data: &mut DirtData, new_msg: Vec<OscType>) {
     let id: String = get_id(new_msg[0].to_owned(), new_msg[1].to_owned());
 
+    if id == "" { // been getting an error 
+        return
+    }
+
     if let Some(mut old_dirt_msg) = dirt_data.get(&id) {
         // update_dirt_message(old_dirt_msg, new_msg)
 
@@ -130,7 +134,8 @@ fn get_id(msg0: OscType, msg1: OscType) -> String {
     };
 
     if param.as_str() != "_id_" {
-        panic!("index 0 of message should be '__id__' but it's {}", param)
+        return "".to_string()
+        // panic!("index 0 of message should be '__id__' but it's {}\n", param)
     }
 
     if let OscType::String(id) = msg1 {
