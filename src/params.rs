@@ -1,15 +1,15 @@
 use rosc::OscType;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum DirtValue {
     DI(i32),
     DF(f32),
     DS(String),
 }
 
-// working in Tidal, you should know what params
-// have what types
+
+// working in Tidal, you should know what params have which types
 
 pub trait GetDirtValue {
     fn display_i32(&self, param_name: &str, display_func: fn(&i32) -> String) -> String;
@@ -20,7 +20,8 @@ pub trait GetDirtValue {
 
 pub type DirtParamName = String;
 pub type DirtMessage = HashMap<DirtParamName, DirtValue>;
-pub type DirtData = HashMap<String, DirtMessage>;
+pub type DirtState = HashMap<String, DirtMessage>;
+pub type DirtWindow = VecDeque<DirtMessage>;
 
 impl GetDirtValue for &DirtMessage {
     fn display_i32(&self, param_name: &str, display_func: fn(&i32) -> String) -> String {
@@ -51,20 +52,14 @@ impl GetDirtValue for &DirtMessage {
         let mut huh: Vec<String> = Vec::new();
         for (param_name, value) in *self {
             match value {
-                DirtValue::DF(f) => huh.push(format!("{}: {}", param_name, f)),
-                DirtValue::DI(i) => huh.push(format!("{}: {}", param_name, i)),
-                DirtValue::DS(s) => huh.push(format!("{}: {}", param_name, s)),
+                DirtValue::DF(f) => huh.push(format!("{}:{}", param_name, f)),
+                DirtValue::DI(i) => huh.push(format!("{}:{}", param_name, i)),
+                DirtValue::DS(s) => huh.push(format!("{}:{}", param_name, s)),
             }
         }
         huh.join(",")
     }
 }
-
-// type DirtParam = (DirtParamName, DirtValue);
-
-// type DirtDisplay = fn(DirtValue) -> String;
-// type DirtParamDisplay = fn(DirtValue) -> String;
-// pub type DirtDisplayMap = HashMap<DirtParamName,DirtDisplay>;
 
 fn get_param_name(osc_param: &OscType) -> DirtParamName {
     match osc_param {
@@ -94,7 +89,7 @@ pub fn to_dirt_message(msg: Vec<OscType>) -> DirtMessage {
     dirt_message
 }
 
-fn update_dirt_message(mut dirt_message: DirtMessage, new_msg: Vec<OscType>) {
+fn update_dirt_message(dirt_message: &mut DirtMessage, new_msg: Vec<OscType>) {
     // let stream_id = "";
     dirt_message.clear();
     for i in (0..new_msg.len()).step_by(2) {
@@ -109,19 +104,29 @@ fn update_dirt_message(mut dirt_message: DirtMessage, new_msg: Vec<OscType>) {
     // stream_id
 }
 
-pub fn update_dirt_data(dirt_data: &mut DirtData, new_msg: Vec<OscType>) {
+pub fn update_dirt_state(dirt_state: &mut DirtState, new_msg: Vec<OscType>, msg_window: &mut VecDeque<DirtMessage>) {
     let id: String = get_id(new_msg[0].to_owned(), new_msg[1].to_owned());
 
-    if id == "" { // been getting an error 
-        return
+    if id == "" {
+        return // just don't even bother
     }
 
-    if let Some(mut old_dirt_msg) = dirt_data.get(&id) {
-        // update_dirt_message(old_dirt_msg, new_msg)
+    let dirt_msg: DirtMessage;
 
-        dirt_data.insert(id, to_dirt_message(new_msg));
+    if let Some(old_dirt_msg) = dirt_state.get_mut(&id) {
+
+        update_dirt_message(old_dirt_msg, new_msg);
+        
+        msg_window.push_front(old_dirt_msg.to_owned());
     } else {
-        dirt_data.insert(id, to_dirt_message(new_msg));
+        dirt_msg = to_dirt_message(new_msg);
+        dirt_state.insert(id, dirt_msg.clone());
+
+        msg_window.push_front(dirt_msg);
+    }
+
+    if msg_window.len() > 10 {
+        msg_window.pop_back();
     }
 
 }
@@ -143,4 +148,8 @@ fn get_id(msg0: OscType, msg1: OscType) -> String {
     } else {
         panic!("index 1 of message should be a string")
     }
+}
+
+pub fn new_dirt_window(size: usize) -> DirtWindow {
+    VecDeque::with_capacity(size)
 }

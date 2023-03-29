@@ -3,8 +3,10 @@
 
 // use rosc::OscType;
 
-use crate::params::DirtData;
 use crate::params::DirtMessage;
+use crate::params::DirtState;
+use crate::params::DirtValue;
+use crate::params::DirtWindow;
 use crate::params::GetDirtValue;
 // use crate::params::DirtDisplayMap;
 
@@ -18,6 +20,8 @@ use std::cmp;
 use crate::string_constants::BAR_CHARS;
 use crate::string_constants::BOX;
 
+static RIGHT_SPACE: i32 = 25;
+
 // NOTE: will probably replace when I get to using a tui library
 fn display_text(msg: &String) {
     let mut stdout = stdout();
@@ -26,167 +30,163 @@ fn display_text(msg: &String) {
     let _ = writeln!(stdout, "{}", msg);
     let _ = stdout.execute(cursor::MoveTo(0, 0));
     let _ = stdout.execute(cursor::Show).unwrap();
-
 }
-
-// where basically everything happens
-// note: should have different regions of the terminal for patterns with different ids
-// so if d1 updates more frequently than d2,
-// it won't drown out all the d2 messages from being displayed
 
 fn float_mod(f: f32, m: f32) -> f32 {
     ((f % m) + m) % m
 }
 
-pub fn display_dirt_data(dirt_data: &DirtData) {
-
+pub fn display_dirt(dirt_state: &DirtState, dirt_window: &DirtWindow) {
     let mut full_str = String::new();
 
     // TODO: sort keys first
+    if let Some(msg) = dirt_window.front() {
+        full_str.push_str(msg.display_f32("cycle", display_cycle).as_str());
+    };
 
-    for (_id, msg) in dirt_data {
+    for (_id, msg) in dirt_state {
         let huh = display_dirt_message(msg);
         full_str.push_str(huh.as_str());
     }
 
     display_text(&full_str);
-
 }
 
 fn display_dirt_message(msg: &DirtMessage) -> String {
     let display_str: &mut String = &mut String::new();
 
+    match msg.get("_id_") {
+        Some(DirtValue::DS(s)) => {
+            if s == "tick" {
+                return "".to_owned();
+            } else {
+            }
+        }
+        _ => (),
+    }
+
+    let cols = {
+        if let Ok((cols, _rows)) = size() {
+            // the - 25 is just to make sure the string
+            // doesn't wrap around the term when it's printed
+            cmp::max((cols as i32) - RIGHT_SPACE, 1 as i32) as usize
+        } else {
+            1
+        }
+    };
+
     display_str.push_str(
-        msg.display_string("_id_", |s| {
-            format!("id: {}\n", s.to_string())
-        })
-        .as_str(),
+        msg.display_string("_id_", |s| format!("{:<15}{} id ", "", s.to_string()))
+            .as_str(),
+    );
+
+    // display_str.push_str(
+    //     msg.display_f32("cycle", |f| {
+    //         let bar = display_bar_float(&(f - f.floor()), 0.0, 1.0);
+    //         let cycle_mods = format!(
+    //             "{}/8 {}/16 {}/24 {}/32 {}/40 {}/48 {}/56 {}/64",
+    //             float_mod(*f, 8.0).floor() + 1.0,
+    //             float_mod(*f, 2.0 * 8.0).floor() + 1.0,
+    //             float_mod(*f, 3.0 * 8.0).floor() + 1.0,
+    //             float_mod(*f, 4.0 * 8.0).floor() + 1.0,
+    //             float_mod(*f, 5.0 * 8.0).floor() + 1.0,
+    //             float_mod(*f, 6.0 * 8.0).floor() + 1.0,
+    //             float_mod(*f, 7.0 * 8.0).floor() + 1.0,
+    //             float_mod(*f, 8.0 * 8.0).floor() + 1.0
+    //         );
+    //         format!("{}\n {}", bar, cycle_mods)
+    //     })
+    //     .as_str(),
+    // );
+
+    display_str.push_str(
+        msg.display_f32("delta", |f| format!("| {} delta\n", f.to_string()))
+            .as_str(),
     );
 
     display_str.push_str(
-        msg.display_f32("cycle", |f| {
-            let bar = display_bar_float(&(f - f.floor()), 0.0, 1.0);
-            let cycle_mods = format!(
-                "{}/8 {}/16 {}/24 {}/32 {}/40 {}/48 {}/56 {}/64",
-                float_mod(*f, 8.0).floor() + 1.0,
-                float_mod(*f, 2.0 * 8.0).floor() + 1.0,
-                float_mod(*f, 3.0 * 8.0).floor() + 1.0,
-                float_mod(*f, 4.0 * 8.0).floor() + 1.0,
-                float_mod(*f, 5.0 * 8.0).floor() + 1.0,
-                float_mod(*f, 6.0 * 8.0).floor() + 1.0,
-                float_mod(*f, 7.0 * 8.0).floor() + 1.0,
-                float_mod(*f, 8.0 * 8.0).floor() + 1.0
-            );
-            format!("{}\n {}", bar, cycle_mods)
-        })
-        .as_str(),
+        msg.display_f32("n", |f| format!("{}  n ", display_bin_float(f)))
+            .as_str(),
     );
 
-    display_str.push_str(
-        msg.display_f32("delta", |f| {
-            format!(" | delta: {}\n", f.to_string())
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_string("s", |s| {
-            format!("s: {}\n", s)
-        })
-        .as_str(),
-    );
-
+    display_str.push_str(msg.display_string("s", |s| format!("| {} s\n", s)).as_str());
 
     display_str.push_str(
         msg.display_i32("orbit", |i| {
-            format!("orbit: {}\n", display_bar_int(i, 0, 9))
+            format!("   {} orbit\n", display_bar_int(i, 0, 9))
         })
         .as_str(),
     );
 
     display_str.push_str(
         msg.display_f32("gain", |f| {
-            format!("gain : {}\n", display_bar_float(f, 0.0, 2.0))
+            format!("{} gain\n", display_bar_float(f, 0.0, 2.0))
         })
         .as_str(),
     );
-
 
     display_str.push_str(
         msg.display_f32("amp", |f| {
-            format!("amp : {}\n", display_bar_float(f, 0.0, 2.0))
+            format!("{} amp\n", display_bar_float(f, 0.0, 2.0))
         })
         .as_str(),
     );
-
 
     display_str.push_str(
         msg.display_f32("pan", |f| {
-            format!("pan: {}\n", display_bar_float(f, 0.0, 1.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("n", |f| {
-            format!("n: {}\n", f.to_string())
+            format!("{} pan\n", display_bar_float(f, 0.0, 1.0))
         })
         .as_str(),
     );
 
     display_str.push_str(
         msg.display_f32("begin", |f| {
-            format!("begin: {}\n", display_bar_float(f, 0.0, 1.0))
+            format!("{} begin\n", display_bar_float(f, 0.0, 1.0))
         })
         .as_str(),
     );
 
     display_str.push_str(
         msg.display_f32("end", |f| {
-            format!("end  : {}\n", display_bar_float(f, 0.0, 1.0))
+            format!("{} end\n", display_bar_float(f, 0.0, 1.0))
         })
         .as_str(),
     );
 
-
     display_str.push_str(
         msg.display_f32("speed", |f| {
-            format!("speed  : {}\n", display_bar_float(f, -10.0, 10.0))
+            format!("{} speed\n", display_bar_float(f, -10.0, 10.0))
         })
         .as_str(),
     );
 
     display_str.push_str(
         msg.display_f32("release", |f| {
-            format!("rel : {}\n", display_bar_float(f, 0.0, 4.0))
+            format!("{} rel\n", display_bar_float(f, 0.0, 4.0))
         })
         .as_str(),
     );
 
-
     display_str.push_str(
-        msg.display_i32("cut", |i| {
-            format!("cut: {}\n\n", display_bar_int(i, -1, 8))
-        })
-        .as_str(),
-    );
-
-
-    display_str.push_str(
-        msg.display_f32("hcutoff", |f| {
-            format!("hcutoff: {}\n", display_bar_float(f, 0.0, 20_000.0))
-        })
-        .as_str(),
+        msg.display_i32("cut", |i| format!("   {} cut\n", display_bar_int(i, -1, 9)))
+            .as_str(),
     );
 
     display_str.push_str(
         msg.display_f32("cutoff", |f| {
-            format!("cutoff: {}\n", display_bar_float(f, 0.0, 20_000.0))
+            format!("{} cutoff\n", display_bar_float(f, 0.0, 20_000.0))
         })
         .as_str(),
     );
 
-    display_str.push_str("\n-------------------------------------\n");
+    display_str.push_str(
+        msg.display_f32("hcutoff", |f| {
+            format!("{} hcutoff\n", display_bar_float(f, 0.0, 20_000.0))
+        })
+        .as_str(),
+    );
+
+    // display_str.push_str("\n-------------------------------------\n");
 
     // display_str.push_str(msg.display_raw().as_str());
 
@@ -221,12 +221,34 @@ fn get_box_string(val: usize) -> String {
     BOX.repeat(val_div) + BAR_CHARS[val_mod as usize]
 }
 
+fn display_cycle(f: &f32) -> String {
+    let bar = display_bar_float(&(f - f.floor()), 0.0, 1.0);
+    let cycle_mods = format!(
+        "{}/8 {}/16 {}/24 {}/32 {}/40 {}/48 {}/56 {}/64",
+        float_mod(*f, 8.0).floor() + 1.0,
+        float_mod(*f, 2.0 * 8.0).floor() + 1.0,
+        float_mod(*f, 3.0 * 8.0).floor() + 1.0,
+        float_mod(*f, 4.0 * 8.0).floor() + 1.0,
+        float_mod(*f, 5.0 * 8.0).floor() + 1.0,
+        float_mod(*f, 6.0 * 8.0).floor() + 1.0,
+        float_mod(*f, 7.0 * 8.0).floor() + 1.0,
+        float_mod(*f, 8.0 * 8.0).floor() + 1.0
+    );
+    format!("{}\n {}\n", bar, cycle_mods)
+}
+
+fn display_cycle_bin(f: &f32) -> String {
+    let bar = display_bar_float(&(f - f.floor()), 0.0, 1.0);
+    let cycle_mods = format!("{:032b}",*f as usize);
+    format!("{}\n    {}\n", bar, cycle_mods)
+}
+
 pub fn display_bar_float(f: &f32, min: f32, max: f32) -> String {
     let cols = {
         if let Ok((cols, _rows)) = size() {
             // the - 25 is just to make sure the string
             // doesn't wrap around the term when it's printed
-            cmp::max((cols as i32) - 25, 1 as i32) as usize
+            cmp::max((cols as i32) - RIGHT_SPACE, 1 as i32) as usize
         } else {
             1
         }
@@ -242,25 +264,44 @@ pub fn display_bar_float(f: &f32, min: f32, max: f32) -> String {
 }
 
 pub fn display_bar_int(i: &i32, min: i32, max: i32) -> String {
-
     let cols = {
         if let Ok((cols, _rows)) = size() {
-            cmp::max((cols as i32) - 25, 1 as i32)
+            cmp::max((cols as i32) - RIGHT_SPACE, 1 as i32)
         } else {
             1
         }
     };
 
     let mut temp_str = String::new();
+    
 
-    for j in min..max {
+    let mut trueMax = max;
+    if *i > max {
+        trueMax = *i + 1;
+    }
+
+    for j in min..(trueMax){
         if *i == j {
-            temp_str.push_str(format!("##{}##",j).as_str())
+            temp_str.push_str(format!(" [{}] ", j).as_str())
         } else {
-            temp_str.push_str(format!(" {} ",j).as_str())
+            temp_str.push_str(format!(" {} ", j).as_str())
         }
-
     }
 
     temp_str
+}
+
+pub fn display_bin_float(f: &f32) -> String {
+    let cols = {
+        if let Ok((cols, _rows)) = size() {
+            cmp::max((cols as i32) - RIGHT_SPACE, 1)
+        } else {
+            1
+        }
+    };
+
+    // let ahh = " ".repeat(cols as usize);
+    // format!("{}{:016b}", ahh, *f as i32)
+
+    format!("{:16b}", *f as i16)
 }
