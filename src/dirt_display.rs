@@ -23,7 +23,7 @@ use crate::string_constants::BOX;
 static RIGHT_SPACE: i32 = 25;
 
 // NOTE: will probably replace when I get to using a tui library
-fn display_text(msg: &String) {
+pub fn display_text(msg: &String) {
     let mut stdout = stdout();
     stdout.execute(cursor::Hide).unwrap();
     let _ = stdout.execute(terminal::Clear(terminal::ClearType::FromCursorDown));
@@ -42,12 +42,17 @@ pub fn display_dirt(dirt_state: &DirtState, dirt_window: &DirtWindow) {
     // TODO: sort keys first
     if let Some(msg) = dirt_window.front() {
         full_str.push_str(msg.display_f32("cycle", display_cycle).as_str());
-    };
 
-    for (_id, msg) in dirt_state {
-        let huh = display_dirt_message(msg);
-        full_str.push_str(huh.as_str());
-    }
+        for (_id, msg) in dirt_state {
+            let huh = display_dirt_message(msg);
+            full_str.push_str(huh.as_str());
+        }
+
+        full_str.push_str(msg.display_raw().as_str());
+    } else {
+        full_str.push_str("Some(msg) = dirt_window.front() failed???")
+
+    };
 
     display_text(&full_str);
 }
@@ -65,10 +70,18 @@ fn display_dirt_message(msg: &DirtMessage) -> String {
         _ => (),
     }
 
+//    let cols = {
+//        if let Ok((cols, _rows)) = size() {
+//            // the - 25 is just to make sure the string
+//            // doesn't wrap around the term when it's printed
+//            cmp::max((cols as i32) - RIGHT_SPACE, 1 as i32) as usize
+//        } else {
+//            1
+//        }
+//    };
+
     let cols = {
         if let Ok((cols, _rows)) = size() {
-            // the - 25 is just to make sure the string
-            // doesn't wrap around the term when it's printed
             cmp::max((cols as i32) - RIGHT_SPACE, 1 as i32) as usize
         } else {
             1
@@ -80,24 +93,6 @@ fn display_dirt_message(msg: &DirtMessage) -> String {
             .as_str(),
     );
 
-    // display_str.push_str(
-    //     msg.display_f32("cycle", |f| {
-    //         let bar = display_bar_float(&(f - f.floor()), 0.0, 1.0);
-    //         let cycle_mods = format!(
-    //             "{}/8 {}/16 {}/24 {}/32 {}/40 {}/48 {}/56 {}/64",
-    //             float_mod(*f, 8.0).floor() + 1.0,
-    //             float_mod(*f, 2.0 * 8.0).floor() + 1.0,
-    //             float_mod(*f, 3.0 * 8.0).floor() + 1.0,
-    //             float_mod(*f, 4.0 * 8.0).floor() + 1.0,
-    //             float_mod(*f, 5.0 * 8.0).floor() + 1.0,
-    //             float_mod(*f, 6.0 * 8.0).floor() + 1.0,
-    //             float_mod(*f, 7.0 * 8.0).floor() + 1.0,
-    //             float_mod(*f, 8.0 * 8.0).floor() + 1.0
-    //         );
-    //         format!("{}\n {}", bar, cycle_mods)
-    //     })
-    //     .as_str(),
-    // );
 
     display_str.push_str(
         msg.display_f32("delta", |f| format!("| {} delta\n", f.to_string()))
@@ -121,6 +116,13 @@ fn display_dirt_message(msg: &DirtMessage) -> String {
     display_str.push_str(
         msg.display_f32("gain", |f| {
             format!("{} gain\n", display_bar_float(f, 0.0, 2.0))
+        })
+        .as_str(),
+    );
+
+    display_str.push_str(
+        msg.display_f32("accelerate", |f| {
+            format!("{} accelerate\n", display_bar_float(f, -10.0, 10.0))
         })
         .as_str(),
     );
@@ -168,7 +170,7 @@ fn display_dirt_message(msg: &DirtMessage) -> String {
     );
 
     display_str.push_str(
-        msg.display_i32("cut", |i| format!("   {} cut\n", display_bar_int(i, -1, 9)))
+        msg.display_i32("cut", |i| format!("  {} cut\n", display_bar_int(i, -1, 9)))
             .as_str(),
     );
 
@@ -185,6 +187,70 @@ fn display_dirt_message(msg: &DirtMessage) -> String {
         })
         .as_str(),
     );
+
+    display_str.push_str(
+        msg.display_f32("shape", |f| {
+            format!("{} shape\n", display_bar_float(f, 0.0, 1.0))
+        })
+        .as_str(),
+    );
+
+    display_str.push_str(
+        msg.display_f32("coarse", |f| {
+            format!("{} coarse\n", display_bar_float(f, 0.0, 5.0))
+        })
+        .as_str(),
+    );
+
+    display_str.push_str(
+        msg.display_f32("distort", |f| {
+            format!("{} distort\n", display_bar_float(f, 0.0, 5.0))
+        })
+        .as_str(),
+    );
+    
+    display_str.push_str(
+        msg.display_f32("squiz", |f| {
+            format!("{} squiz\n", display_bar_float(f, 0.0, 5.0))
+        })
+        .as_str(),
+    );
+
+    display_str.push_str(
+        msg.display_f32("waveloss", |f| {
+            format!("{} waveloss\n", display_bar_float(f, 0.0, 100.0))
+        })
+        .as_str(),
+    );
+
+    display_str.push_str(
+        msg.display_f32("delay", |f| {
+            format!("{} delay\n", display_bar_float(f, 0.0, 1.0))
+        })
+        .as_str(),
+    );
+
+    display_str.push_str(
+        msg.display_f32("delaytime", |f| {
+            format!("{} delayt\n", display_bar_float(f, 0.0, 1.0))
+        })
+        .as_str(),
+    );
+
+    display_str.push_str(
+        msg.display_f32("delayfeedback", |f| {
+            format!("{} delayfb\n", display_bar_float(f, 0.0, 1.0))
+        })
+        .as_str(),
+    );
+
+
+// pub fn display_param_int(name : String, i : i32) -> String{
+//     let display_name = shorten_name(&name);
+//     match name.as_str() {
+//         _ => format!("{:<8} : {:<8}",display_name,i)
+//     }
+// }
 
     // display_str.push_str("\n-------------------------------------\n");
 
@@ -246,8 +312,6 @@ fn display_cycle_bin(f: &f32) -> String {
 pub fn display_bar_float(f: &f32, min: f32, max: f32) -> String {
     let cols = {
         if let Ok((cols, _rows)) = size() {
-            // the - 25 is just to make sure the string
-            // doesn't wrap around the term when it's printed
             cmp::max((cols as i32) - RIGHT_SPACE, 1 as i32) as usize
         } else {
             1
@@ -263,7 +327,7 @@ pub fn display_bar_float(f: &f32, min: f32, max: f32) -> String {
     //
 }
 
-pub fn display_bar_int(i: &i32, min: i32, max: i32) -> String {
+fn display_bar_int(i: &i32, min: i32, max: i32) -> String {
     let cols = {
         if let Ok((cols, _rows)) = size() {
             cmp::max((cols as i32) - RIGHT_SPACE, 1 as i32)
@@ -288,10 +352,10 @@ pub fn display_bar_int(i: &i32, min: i32, max: i32) -> String {
         }
     }
 
-    temp_str
+    format!("{:width$} ", temp_str, width = ((cols) as usize))
 }
 
-pub fn display_bin_float(f: &f32) -> String {
+fn display_bin_float(f: &f32) -> String {
     let cols = {
         if let Ok((cols, _rows)) = size() {
             cmp::max((cols as i32) - RIGHT_SPACE, 1)
