@@ -111,6 +111,16 @@ pub fn update_dirt_state(dirt_state: &mut DirtState, new_msg: Vec<OscType>, msg_
         return // just don't even bother
     }
 
+    if msg_window.len() > 10 {
+        let msg_to_remove = msg_window.pop_back();
+        match msg_to_remove.expect("REASON").get("_id_") {
+            Some(DirtValue::DS(id)) => {
+                dirt_state.insert(id.to_string(),HashMap::new());
+            }
+            _ => {}
+        }
+    }
+
     let dirt_msg: DirtMessage;
 
     if let Some(old_dirt_msg) = dirt_state.get_mut(&id) {
@@ -125,9 +135,7 @@ pub fn update_dirt_state(dirt_state: &mut DirtState, new_msg: Vec<OscType>, msg_
         msg_window.push_front(dirt_msg);
     }
 
-    if msg_window.len() > 10 {
-        msg_window.pop_back();
-    }
+
 
 }
 
