@@ -7,6 +7,7 @@ use rosc::{OscPacket};
 
 // use crate::params::DirtMessage;
 use crate::params::DirtState;
+use clap::Parser;
 
 use std::collections::{HashMap, VecDeque};
 use std::env;
@@ -25,9 +26,120 @@ mod params;
 mod string_constants;
 mod dirt_display;
 
+#[derive(Debug, Clone)]
+pub enum DisplayValueType {
+    Float,
+    Integer,
+    String,
+}
+
+#[derive(Debug, Clone)]
+pub enum DisplayStyle {
+    Raw,
+    BarFloat { min: f32, max: f32 },
+    BarInt { min: i32, max: i32 },
+    Binary16,
+    CustomFloat,
+    Cycle,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParamDisplayConfig {
+    pub value_type: DisplayValueType,
+    pub style: DisplayStyle,
+    pub label: String, // e.g., " gain", " s"
+}
+
+fn parse_param_display_arg(arg_val: &str) -> Result<(String, ParamDisplayConfig), String> {
+    let parts: Vec<&str> = arg_val.split(':').collect();
+    if parts.len() < 3 || parts.len() > 5 {
+        return Err(format!(
+            "Invalid format for --param-display: {}. Expected <param_name>:<type>:<style>[:<min>:<max>]",
+            arg_val
+        ));
+    }
+
+    let param_name = parts[0].to_string();
+    let label = format!(" {}", param_name); // Default label, can be refined
+
+    let value_type = match parts[1] {
+        "f32" => DisplayValueType::Float,
+        "i32" => DisplayValueType::Integer,
+        "string" => DisplayValueType::String,
+        _ => return Err(format!("Invalid type '{}' for parameter {}", parts[1], param_name)),
+    };
+
+    let style = match parts[2] {
+        "raw" => DisplayStyle::Raw,
+        "bar_float" => {
+            if parts.len() != 5 {
+                return Err(format!(
+                    "Style 'bar_float' requires min and max values (e.g., 0.0:2.0) for {}",
+                    param_name
+                ));
+            }
+            let min = parts[3].parse::<f32>().map_err(|e| {
+                format!("Invalid min value '{}' for {}: {}", parts[3], param_name, e)
+            })?;
+            let max = parts[4].parse::<f32>().map_err(|e| {
+                format!("Invalid max value '{}' for {}: {}", parts[4], param_name, e)
+            })?;
+            DisplayStyle::BarFloat { min, max }
+        }
+        "bar_int" => {
+            if parts.len() != 5 {
+                return Err(format!(
+                    "Style 'bar_int' requires min and max values (e.g., 0:10) for {}",
+                    param_name
+                ));
+            }
+            let min = parts[3].parse::<i32>().map_err(|e| {
+                format!("Invalid min value '{}' for {}: {}", parts[3], param_name, e)
+            })?;
+            let max = parts[4].parse::<i32>().map_err(|e| {
+                format!("Invalid max value '{}' for {}: {}", parts[4], param_name, e)
+            })?;
+            DisplayStyle::BarInt { min, max }
+        }
+        "binary16" => DisplayStyle::Binary16,
+        "custom_float" => DisplayStyle::CustomFloat,
+        "cycle" => DisplayStyle::Cycle,
+        _ => return Err(format!("Invalid style '{}' for parameter {}", parts[2], param_name)),
+    };
+
+    Ok((
+        param_name.clone(),
+        ParamDisplayConfig { value_type, style, label },
+    ))
+}
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    #[arg(short, long, value_parser = clap::value_parser!(SocketAddrV4))]
+    listen_addr: SocketAddrV4,
+
+    #[arg(long, value_name = "CONFIG_STRING", action = clap::ArgAction::Append)]
+    param_display: Vec<String>,
+}
+
 // macro_rules! PARAM_FORMAT_STR { () => { "{:<8} : {:<}" }; } 
 
 fn main() {
+    let cli = Cli::parse();
+
+    let mut param_configs: HashMap<String, ParamDisplayConfig> = HashMap::new();
+    for config_str in cli.param_display {
+        match parse_param_display_arg(&config_str) {
+            Ok((name, config)) => {
+                param_configs.insert(name, config);
+            }
+            Err(e) => {
+                eprintln!("Error parsing --param-display argument: {}", e);
+                std::process::exit(1);
+            }
+        }
+    }
 
     let WINDOW_SIZE: usize = 100;
     let TIME_WINDOW_SIZE: usize = 10;
@@ -40,14 +152,7 @@ fn main() {
 
     let mut packets_recieved: usize = 0;
 
-    if args.len() < 2 {
-        println!("{}", usage);
-        ::std::process::exit(1)
-    }
-    let addr = match SocketAddrV4::from_str(&args[1]) {
-        Ok(addr) => addr,
-        Err(_) => panic!("{}", usage),
-    };
+    let addr = cli.listen_addr;
     let sock = UdpSocket::bind(addr).unwrap();
     // println!("Listening to {}", addr);
 
@@ -65,8 +170,6 @@ fn main() {
     let mut elapsed_time = SystemTime::now();
     let mut last_elapsed: u128 = 0;
     let mut avg_elapsed: u128 = 0;
-
-
 
     loop {
         match sock.recv_from(&mut buf) {
@@ -88,7 +191,7 @@ fn main() {
                 // println!("nanos between msgs: {} total from {}", last_elapsed, addr);
                 println!("avg msgs per sec: {} total from {}", (1_000_000_000f32 / avg_elapsed as f32), addr);
                 let (_, packet) = rosc::decoder::decode_udp(&buf[..size]).unwrap();
-                handle_packet(packet, &mut dirt_state, &mut msg_window);
+                handle_packet(packet, &mut dirt_state, &mut msg_window, &param_configs);
 
                 match elapsed_time.elapsed() {
                     Ok(elapsed) => {
@@ -104,27 +207,22 @@ fn main() {
                     }
                 }
 
-
-
             }
             Err(e) => {
                 println!("Error receiving from socket: {}", e);
                 break;
             }
         }
-
-
     }
-
 }
 
-fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<DirtMessage>) {
+fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<DirtMessage>, param_configs: &HashMap<String, ParamDisplayConfig>) {
     match packet {
         OscPacket::Message(msg) => {
+            let packet_args = msg.args;
+            params::update_dirt_state(dirt_state, packet_args, msg_window);
 
-            params::update_dirt_state(dirt_state,msg.args, msg_window);
-
-            dirt_display::display_dirt(dirt_state, msg_window);
+            dirt_display::display_dirt(dirt_state, msg_window, param_configs);
 
         }
         OscPacket::Bundle(_bundle) => {

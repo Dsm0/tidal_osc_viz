@@ -20,6 +20,8 @@ use std::cmp;
 use crate::string_constants::BAR_CHARS;
 use crate::string_constants::BOX;
 
+use std::collections::HashMap;
+
 static RIGHT_SPACE: i32 = 25;
 
 // NOTE: will probably replace when I get to using a tui library
@@ -36,242 +38,154 @@ fn float_mod(f: f32, m: f32) -> f32 {
     ((f % m) + m) % m
 }
 
-pub fn display_dirt(dirt_state: &DirtState, dirt_window: &DirtWindow) {
+pub fn display_dirt(
+    dirt_state: &DirtState,
+    dirt_window: &DirtWindow,
+    param_configs: &HashMap<String, crate::ParamDisplayConfig>,
+) {
     let mut full_str = String::new();
-
-    // TODO: sort keys first
-    if let Some(msg) = dirt_window.front() {
-        full_str.push_str(msg.display_f32("cycle", display_cycle).as_str());
-
-        for (_id, msg) in dirt_state {
-            let huh = display_dirt_message(msg);
-            full_str.push_str(huh.as_str());
-        }
-
-        full_str.push_str(msg.display_raw().as_str());
-    } else {
-        full_str.push_str("Some(msg) = dirt_window.front() failed???")
-
-    };
-
-    display_text(&full_str);
-}
-
-fn display_dirt_message(msg: &DirtMessage) -> String {
-    let display_str: &mut String = &mut String::new();
-
-    match msg.get("_id_") {
-        Some(DirtValue::DS(s)) => {
-            if s == "tick" {
-                return "".to_owned();
-            } else {
-            }
-        }
-        _ => (),
-    }
-
-//    let cols = {
-//        if let Ok((cols, _rows)) = size() {
-//            // the - 25 is just to make sure the string
-//            // doesn't wrap around the term when it's printed
-//            cmp::max((cols as i32) - RIGHT_SPACE, 1 as i32) as usize
-//        } else {
-//            1
-//        }
-//    };
 
     let cols = {
         if let Ok((cols, _rows)) = size() {
-            cmp::max((cols as i32) - RIGHT_SPACE, 1 as i32) as usize
+            cmp::max((cols as i32) - RIGHT_SPACE, 1_i32) as usize
         } else {
             1
         }
     };
 
-    display_str.push_str(
-        msg.display_string("_id_", |s| format!("{:<15}{} id ", "", s.to_string()))
-            .as_str(),
-    );
+    // TODO: sort keys first
+    if let Some(msg) = dirt_window.front() {
+        // Handle "cycle" specifically or make it configurable too
+        // For now, let's assume "cycle" might have its own config or a default handling
+        if let Some(config) = param_configs.get("cycle") {
+            match config.style {
+                crate::DisplayStyle::Cycle => {
+                    full_str.push_str(msg.display_f32("cycle", |f| display_cycle(f, cols)).as_str());
+                }
+                _ => { // Default for cycle if not 'Cycle' style
+                    full_str.push_str(msg.display_f32("cycle", |f| format!("cycle: {}
+", f)).as_str());
+                }
+            }
+        } else { // Default if "cycle" is not configured
+            full_str.push_str(msg.display_f32("cycle", |f| display_cycle(f, cols)).as_str());
+        }
 
+        for (id, current_msg_state) in dirt_state {
+            // Skip "tick" or other meta messages if necessary, or make them configurable
+             if id == "tick" { continue; }
+            // display_dirt_message now needs param_configs
+            let huh = display_dirt_message(current_msg_state, cols, param_configs, id);
+            full_str.push_str(huh.as_str());
+        }
 
-    display_str.push_str(
-        msg.display_f32("delta", |f| format!("| {} delta\n", f.to_string()))
-            .as_str(),
-    );
+        full_str.push_str(msg.display_raw().as_str()); // Keep raw display at the end for now
+    } else {
+        full_str.push_str("Some(msg) = dirt_window.front() failed???")
+    }
 
-    display_str.push_str(
-        msg.display_f32("n", |f| format!("{}  n ", display_bin_float(f)))
-            .as_str(),
-    );
+    display_text(&full_str);
+}
 
-    display_str.push_str(msg.display_string("s", |s| format!("| {} s\n", s)).as_str());
+fn display_dirt_message(
+    msg: &DirtMessage,
+    cols: usize,
+    param_configs: &HashMap<String, crate::ParamDisplayConfig>,
+    msg_id: &String
+) -> String {
+    let display_str: &mut String = &mut String::new();
 
-    display_str.push_str(
-        msg.display_i32("orbit", |i| {
-            format!("   {} orbit\n", display_bar_int(i, 0, 9))
-        })
-        .as_str(),
-    );
+    // Display message ID (e.g., the 'sound source' like 's1', 's2')
+    // This could also be made part of the configurable display if needed
+    display_str.push_str(&format!("{:<15}{} id
+", "", msg_id));
 
-    display_str.push_str(
-        msg.display_f32("gain", |f| {
-            format!("{} gain\n", display_bar_float(f, 0.0, 2.0))
-        })
-        .as_str(),
-    );
+    // Iterate over parameters in the message, or iterate over configured params?
+    // Iterating over message params ensures we see everything, then apply config or default.
+    // For a defined order, one might iterate over a sorted list of configured keys
+    // that are also present in the message. For now, iterate msg keys.
+    let mut sorted_params: Vec<_> = msg.keys().collect();
+    sorted_params.sort(); // Sort for consistent display order
 
-    display_str.push_str(
-        msg.display_f32("accelerate", |f| {
-            format!("{} accelerate\n", display_bar_float(f, -10.0, 10.0))
-        })
-        .as_str(),
-    );
+    for param_name_str in sorted_params {
+        let param_name = param_name_str.as_str();
 
-    display_str.push_str(
-        msg.display_f32("amp", |f| {
-            format!("{} amp\n", display_bar_float(f, 0.0, 2.0))
-        })
-        .as_str(),
-    );
+        if param_name == "_id_" || param_name == "cycle" { // Already handled or not for individual display here
+            continue;
+        }
 
-    display_str.push_str(
-        msg.display_f32("pan", |f| {
-            format!("{} pan\n", display_bar_float(f, 0.0, 1.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("begin", |f| {
-            format!("{} begin\n", display_bar_float(f, 0.0, 1.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("end", |f| {
-            format!("{} end\n", display_bar_float(f, 0.0, 1.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("speed", |f| {
-            format!("{} speed\n", display_bar_float(f, -10.0, 10.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("release", |f| {
-            format!("{} rel\n", display_bar_float(f, 0.0, 4.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_i32("cut", |i| format!("  {} cut\n", display_bar_int(i, -1, 9)))
-            .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("cutoff", |f| {
-            format!("{} cutoff\n", display_bar_float(f, 0.0, 20_000.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("hcutoff", |f| {
-            format!("{} hcutoff\n", display_bar_float(f, 0.0, 20_000.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("shape", |f| {
-            format!("{} shape\n", display_bar_float(f, 0.0, 1.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("coarse", |f| {
-            format!("{} coarse\n", display_bar_float(f, 0.0, 5.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("distort", |f| {
-            format!("{} distort\n", display_bar_float(f, 0.0, 5.0))
-        })
-        .as_str(),
-    );
-    
-    display_str.push_str(
-        msg.display_f32("squiz", |f| {
-            format!("{} squiz\n", display_bar_float(f, 0.0, 5.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("waveloss", |f| {
-            format!("{} waveloss\n", display_bar_float(f, 0.0, 100.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("delay", |f| {
-            format!("{} delay\n", display_bar_float(f, 0.0, 1.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("delaytime", |f| {
-            format!("{} delayt\n", display_bar_float(f, 0.0, 1.0))
-        })
-        .as_str(),
-    );
-
-    display_str.push_str(
-        msg.display_f32("delayfeedback", |f| {
-            format!("{} delayfb\n", display_bar_float(f, 0.0, 1.0))
-        })
-        .as_str(),
-    );
-
-
-// pub fn display_param_int(name : String, i : i32) -> String{
-//     let display_name = shorten_name(&name);
-//     match name.as_str() {
-//         _ => format!("{:<8} : {:<8}",display_name,i)
-//     }
-// }
-
-    // display_str.push_str("\n-------------------------------------\n");
-
-    // display_str.push_str(msg.display_raw().as_str());
+        if let Some(config) = param_configs.get(param_name) {
+            // Parameter has a specific configuration
+            match config.value_type {
+                crate::DisplayValueType::Float => {
+                    display_str.push_str(
+                        msg.display_f32(param_name, |val| match &config.style {
+                            crate::DisplayStyle::BarFloat { min, max } => {
+                                format!("{} {}
+", display_bar_float(val, *min, *max, cols), config.label)
+                            }
+                            crate::DisplayStyle::CustomFloat => {
+                                format!("{} {}
+", display_float(val, cols), config.label)
+                            }
+                             crate::DisplayStyle::Binary16 => { // Assuming Binary16 means f32 to i16 then binary
+                                format!("{} {}
+", display_bin_float(val, cols), config.label)
+                            }
+                            crate::DisplayStyle::Raw | crate::DisplayStyle::Cycle => { // Cycle unlikely here but for completeness
+                                format!("{}: {} {}
+", param_name, val, config.label)
+                            }
+                            _ => format!("{}: {} (unsupported style for f32)
+", param_name, val), // Fallback for mismatched style
+                        }).as_str(),
+                    );
+                }
+                crate::DisplayValueType::Integer => {
+                    display_str.push_str(
+                        msg.display_i32(param_name, |val| match &config.style {
+                            crate::DisplayStyle::BarInt { min, max } => {
+                                format!("{} {}
+", display_bar_int(val, *min, *max, cols), config.label)
+                            }
+                            crate::DisplayStyle::Raw => {
+                                format!("{}: {} {}
+", param_name, val, config.label)
+                            }
+                            _ => format!("{}: {} (unsupported style for i32)
+", param_name, val), // Fallback
+                        }).as_str(),
+                    );
+                }
+                crate::DisplayValueType::String => {
+                    display_str.push_str(
+                        msg.display_string(param_name, |val| match &config.style {
+                            crate::DisplayStyle::Raw => {
+                                format!("{}: {} {}
+", param_name, val, config.label)
+                            }
+                            _ => format!("{}: {} (unsupported style for string)
+", param_name, val), // Fallback
+                        }).as_str(),
+                    );
+                }
+            }
+        } else {
+            // Default display for unconfigured parameters: raw value
+            match msg.get(param_name) {
+                Some(DirtValue::DF(f)) => display_str.push_str(&format!("{}: {}
+", param_name, f)),
+                Some(DirtValue::DI(i)) => display_str.push_str(&format!("{}: {}
+", param_name, i)),
+                Some(DirtValue::DS(s)) => display_str.push_str(&format!("{}: {}
+", param_name, s)),
+                None => {} // Should not happen if iterating keys from msg
+            }
+        }
+    }
 
     display_str.to_string()
 }
-
-// pub fn display_param_str(name : String, s : String) -> String {
-//     let display_name = shorten_name(&name);
-//     match name.as_str() {
-//         _ => format!("{:<8} : {:<8}",display_name,s)
-//     }
-// }
-
-// pub fn display_param_int(name : String, i : i32) -> String{
-//     let display_name = shorten_name(&name);
-//     match name.as_str() {
-//         _ => format!("{:<8} : {:<8}",display_name,i)
-//     }
-// }
 
 fn remap_range(s: f32, l1: f32, h1: f32, l2: f32, h2: f32) -> f32 {
     l2 + (s - l1) * (h2 - l2) / (h1 - l1)
@@ -284,11 +198,18 @@ fn get_box_string(val: usize) -> String {
 
     let (val_div, val_mod) = (val / BAR_CHARS.len(), val % BAR_CHARS.len());
 
+    if BAR_CHARS.len() == 0 { // Prevent division by zero if BAR_CHARS is empty
+        return BOX.repeat(val_div);
+    }
+    if val_mod >= BAR_CHARS.len() { // Prevent out of bounds access
+        return BOX.repeat(val_div);
+    }
+
     BOX.repeat(val_div) + BAR_CHARS[val_mod as usize]
 }
 
-fn display_cycle(f: &f32) -> String {
-    let bar = display_bar_float(&(f - f.floor()), 0.0, 1.0);
+fn display_cycle(f: &f32, cols: usize) -> String {
+    let bar = display_bar_float(&(f - f.floor()), 0.0, 1.0, cols);
     let cycle_mods = format!(
         "{}/8 {}/16 {}/24 {}/32 {}/40 {}/48 {}/56 {}/64",
         float_mod(*f, 8.0).floor() + 1.0,
@@ -303,42 +224,24 @@ fn display_cycle(f: &f32) -> String {
     format!("{}\n {}\n", bar, cycle_mods)
 }
 
-fn display_cycle_bin(f: &f32) -> String {
-    let bar = display_bar_float(&(f - f.floor()), 0.0, 1.0);
+fn display_cycle_bin(f: &f32, cols: usize) -> String {
+    let bar = display_bar_float(&(f - f.floor()), 0.0, 1.0, cols);
     let cycle_mods = format!("{:032b}",*f as usize);
     format!("{}\n    {}\n", bar, cycle_mods)
 }
 
-pub fn display_bar_float(f: &f32, min: f32, max: f32) -> String {
-    let cols = {
-        if let Ok((cols, _rows)) = size() {
-            cmp::max((cols as i32) - RIGHT_SPACE, 1 as i32) as usize
-        } else {
-            1
-        }
-    };
-
+pub fn display_bar_float(f: &f32, min: f32, max: f32, cols: usize) -> String {
     let val: f32 = remap_range(*f, min, max, 0.0, (8 * cols) as f32);
 
     let bar_string_index: usize = val.round() as usize;
 
     let bar = get_box_string(bar_string_index);
     format!("{:>3}:{:0width$}:{:<4}", min, bar, max, width = cols)
-    //
 }
 
-fn display_bar_int(i: &i32, min: i32, max: i32) -> String {
-    let cols = {
-        if let Ok((cols, _rows)) = size() {
-            cmp::max((cols as i32) - RIGHT_SPACE, 1 as i32)
-        } else {
-            1
-        }
-    };
-
+fn display_bar_int(i: &i32, min: i32, max: i32, cols: usize) -> String {
     let mut temp_str = String::new();
     
-
     let mut trueMax = max;
     if *i > max {
         trueMax = *i + 1;
@@ -355,17 +258,10 @@ fn display_bar_int(i: &i32, min: i32, max: i32) -> String {
     format!("{:width$} ", temp_str, width = ((cols) as usize))
 }
 
-fn display_bin_float(f: &f32) -> String {
-    let cols = {
-        if let Ok((cols, _rows)) = size() {
-            cmp::max((cols as i32) - RIGHT_SPACE, 1)
-        } else {
-            1
-        }
-    };
+fn display_bin_float(f: &f32, _cols: usize) -> String { // cols might not be used for fixed binary
+    format!("{:016b}", *f as i16) // Padded with zeros to 16 bits
+}
 
-    // let ahh = " ".repeat(cols as usize);
-    // format!("{}{:016b}", ahh, *f as i32)
-
-    format!("{:16b}", *f as i16)
+fn display_float(f: &f32, cols: usize) -> String {
+    format!("{:16}", *f as i16)
 }

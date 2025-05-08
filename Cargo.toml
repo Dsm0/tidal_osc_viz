@@ -9,3 +9,4 @@ edition = "2021"
 rosc = "0.9.1"
 crossterm = "0.26.1"
 termsize = "0.1"
+clap = { version = "4.5.4", features = ["derive"] }
