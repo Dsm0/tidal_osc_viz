@@ -133,6 +133,10 @@ struct Cli {
     /// Flash raw data to the screen (debug)
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Flash raw data to the screen (debug)")]
     flash_data: bool,
+
+    /// Maximum number of ids to display concurrently
+    #[arg(long, value_name = "MAX_IDS", default_value_t = 1, help = "Maximum number of ids to display concurrently")]
+    id_display_max: usize,
 }
 
 // macro_rules! PARAM_FORMAT_STR { () => { "{:<8} : {:<}" }; } 
@@ -140,11 +144,11 @@ struct Cli {
 fn main() {
     let cli = Cli::parse();
 
-    let mut param_configs: HashMap<String, ParamDisplayConfig> = HashMap::new();
+    let mut param_configs: Vec<(String, ParamDisplayConfig)> = Vec::new();
     for config_str in cli.param_display {
         match parse_param_display_arg(&config_str) {
             Ok((name, config)) => {
-                param_configs.insert(name, config);
+                param_configs.push((name, config));
             }
             Err(e) => {
                 eprintln!("Error parsing --param-display argument: {}", e);
@@ -231,7 +235,7 @@ fn main() {
     }
 }
 
-fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<DirtMessage>, param_configs: &HashMap<String, ParamDisplayConfig>, only_changed: bool, single_id: bool) {
+fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<DirtMessage>, param_configs: &Vec<(String, ParamDisplayConfig)>, only_changed: bool, single_id: bool) {
     match packet {
         OscPacket::Message(msg) => {
             let packet_args = msg.args;
