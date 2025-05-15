@@ -22,6 +22,8 @@ use crate::string_constants::BOX;
 
 use std::collections::HashMap;
 
+use std::cmp::{PartialEq, Eq};
+
 static RIGHT_SPACE: i32 = 25;
 
 // NOTE: will probably replace when I get to using a tui library
@@ -42,6 +44,7 @@ pub fn display_dirt(
     dirt_state: &DirtState,
     dirt_window: &DirtWindow,
     param_configs: &HashMap<String, crate::ParamDisplayConfig>,
+    only_changed: bool,
 ) {
     let mut full_str = String::new();
 
@@ -53,33 +56,39 @@ pub fn display_dirt(
         }
     };
 
-    // TODO: sort keys first
     if let Some(msg) = dirt_window.front() {
-        // Handle "cycle" specifically or make it configurable too
-        // For now, let's assume "cycle" might have its own config or a default handling
         if let Some(config) = param_configs.get("cycle") {
             match config.style {
                 crate::DisplayStyle::Cycle => {
                     full_str.push_str(msg.display_f32("cycle", |f| display_cycle(f, cols)).as_str());
                 }
-                _ => { // Default for cycle if not 'Cycle' style
-                    full_str.push_str(msg.display_f32("cycle", |f| format!("cycle: {}
-", f)).as_str());
+                _ => {
+                    full_str.push_str(msg.display_f32("cycle", |f| format!("cycle: {}\n", f)).as_str());
                 }
             }
-        } else { // Default if "cycle" is not configured
+        } else {
             full_str.push_str(msg.display_f32("cycle", |f| display_cycle(f, cols)).as_str());
         }
 
         for (id, current_msg_state) in dirt_state {
-            // Skip "tick" or other meta messages if necessary, or make them configurable
-             if id == "tick" { continue; }
-            // display_dirt_message now needs param_configs
-            let huh = display_dirt_message(current_msg_state, cols, param_configs, id);
+            if id == "tick" { continue; }
+            // Find previous message for this id in dirt_window (skip the most recent)
+            let prev_msg = if only_changed {
+                dirt_window.iter().skip(1).find(|m| {
+                    if let Some(DirtValue::DS(prev_id)) = m.get("_id_") {
+                        prev_id == id
+                    } else {
+                        false
+                    }
+                })
+            } else {
+                None
+            };
+            let huh = display_dirt_message(current_msg_state, prev_msg, cols, param_configs, id, only_changed);
             full_str.push_str(huh.as_str());
         }
 
-        full_str.push_str(msg.display_raw().as_str()); // Keep raw display at the end for now
+        full_str.push_str(msg.display_raw().as_str());
     } else {
         full_str.push_str("Some(msg) = dirt_window.front() failed???")
     }
@@ -89,55 +98,50 @@ pub fn display_dirt(
 
 fn display_dirt_message(
     msg: &DirtMessage,
+    prev_msg: Option<&DirtMessage>,
     cols: usize,
     param_configs: &HashMap<String, crate::ParamDisplayConfig>,
-    msg_id: &String
+    msg_id: &String,
+    only_changed: bool,
 ) -> String {
     let display_str: &mut String = &mut String::new();
-
-    // Display message ID (e.g., the 'sound source' like 's1', 's2')
-    // This could also be made part of the configurable display if needed
-    display_str.push_str(&format!("{:<15}{} id
-", "", msg_id));
-
-    // Iterate over parameters in the message, or iterate over configured params?
-    // Iterating over message params ensures we see everything, then apply config or default.
-    // For a defined order, one might iterate over a sorted list of configured keys
-    // that are also present in the message. For now, iterate msg keys.
+    display_str.push_str(&format!("{:<15}{} id\n", "", msg_id));
     let mut sorted_params: Vec<_> = msg.keys().collect();
-    sorted_params.sort(); // Sort for consistent display order
-
+    sorted_params.sort();
     for param_name_str in sorted_params {
         let param_name = param_name_str.as_str();
-
-        if param_name == "_id_" || param_name == "cycle" { // Already handled or not for individual display here
+        if param_name == "_id_" || param_name == "cycle" {
             continue;
         }
-
+        if only_changed {
+            if let Some(prev) = prev_msg {
+                if let Some(prev_val) = prev.get(param_name) {
+                    if let Some(cur_val) = msg.get(param_name) {
+                        if prev_val == cur_val {
+                            continue; // skip unchanged
+                        }
+                    }
+                }
+            }
+        }
         if let Some(config) = param_configs.get(param_name) {
-            // Parameter has a specific configuration
             match config.value_type {
                 crate::DisplayValueType::Float => {
                     display_str.push_str(
                         msg.display_f32(param_name, |val| match &config.style {
                             crate::DisplayStyle::BarFloat { min, max } => {
-                                format!("{} {}
-", display_bar_float(val, *min, *max, cols), config.label)
+                                format!("{} {}\n", display_bar_float(val, *min, *max, cols), config.label)
                             }
                             crate::DisplayStyle::CustomFloat => {
-                                format!("{} {}
-", display_float(val, cols), config.label)
+                                format!("{} {}\n", display_float(val, cols), config.label)
                             }
-                             crate::DisplayStyle::Binary16 => { // Assuming Binary16 means f32 to i16 then binary
-                                format!("{} {}
-", display_bin_float(val, cols), config.label)
+                            crate::DisplayStyle::Binary16 => {
+                                format!("{} {}\n", display_bin_float(val, cols), config.label)
                             }
-                            crate::DisplayStyle::Raw | crate::DisplayStyle::Cycle => { // Cycle unlikely here but for completeness
-                                format!("{}: {} {}
-", param_name, val, config.label)
+                            crate::DisplayStyle::Raw | crate::DisplayStyle::Cycle => {
+                                format!("{}: {} {}\n", param_name, val, config.label)
                             }
-                            _ => format!("{}: {} (unsupported style for f32)
-", param_name, val), // Fallback for mismatched style
+                            _ => format!("{}: {} (unsupported style for f32)\n", param_name, val),
                         }).as_str(),
                     );
                 }
@@ -145,15 +149,12 @@ fn display_dirt_message(
                     display_str.push_str(
                         msg.display_i32(param_name, |val| match &config.style {
                             crate::DisplayStyle::BarInt { min, max } => {
-                                format!("{} {}
-", display_bar_int(val, *min, *max, cols), config.label)
+                                format!("{} {}\n", display_bar_int(val, *min, *max, cols), config.label)
                             }
                             crate::DisplayStyle::Raw => {
-                                format!("{}: {} {}
-", param_name, val, config.label)
+                                format!("{}: {} {}\n", param_name, val, config.label)
                             }
-                            _ => format!("{}: {} (unsupported style for i32)
-", param_name, val), // Fallback
+                            _ => format!("{}: {} (unsupported style for i32)\n", param_name, val),
                         }).as_str(),
                     );
                 }
@@ -161,29 +162,22 @@ fn display_dirt_message(
                     display_str.push_str(
                         msg.display_string(param_name, |val| match &config.style {
                             crate::DisplayStyle::Raw => {
-                                format!("{}: {} {}
-", param_name, val, config.label)
+                                format!("{}: {} {}\n", param_name, val, config.label)
                             }
-                            _ => format!("{}: {} (unsupported style for string)
-", param_name, val), // Fallback
+                            _ => format!("{}: {} (unsupported style for string)\n", param_name, val),
                         }).as_str(),
                     );
                 }
             }
         } else {
-            // Default display for unconfigured parameters: raw value
             match msg.get(param_name) {
-                Some(DirtValue::DF(f)) => display_str.push_str(&format!("{}: {}
-", param_name, f)),
-                Some(DirtValue::DI(i)) => display_str.push_str(&format!("{}: {}
-", param_name, i)),
-                Some(DirtValue::DS(s)) => display_str.push_str(&format!("{}: {}
-", param_name, s)),
-                None => {} // Should not happen if iterating keys from msg
+                Some(DirtValue::DF(f)) => display_str.push_str(&format!("{}: {}\n", param_name, f)),
+                Some(DirtValue::DI(i)) => display_str.push_str(&format!("{}: {}\n", param_name, i)),
+                Some(DirtValue::DS(s)) => display_str.push_str(&format!("{}: {}\n", param_name, s)),
+                None => {}
             }
         }
     }
-
     display_str.to_string()
 }
 
@@ -265,3 +259,17 @@ fn display_bin_float(f: &f32, _cols: usize) -> String { // cols might not be use
 fn display_float(f: &f32, cols: usize) -> String {
     format!("{:16}", *f as i16)
 }
+
+// Implement PartialEq for DirtValue to allow comparison
+impl PartialEq for DirtValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (DirtValue::DI(a), DirtValue::DI(b)) => a == b,
+            (DirtValue::DF(a), DirtValue::DF(b)) => a == b,
+            (DirtValue::DS(a), DirtValue::DS(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for DirtValue {}

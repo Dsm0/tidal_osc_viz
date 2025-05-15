@@ -121,6 +121,10 @@ struct Cli {
 
     #[arg(long, value_name = "CONFIG_STRING", action = clap::ArgAction::Append)]
     param_display: Vec<String>,
+
+    /// Only display parameters for a given id that have changed since the previous message with that id
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Only display parameters for a given id that have changed since the previous message with that id")]
+    only_changed: bool,
 }
 
 // macro_rules! PARAM_FORMAT_STR { () => { "{:<8} : {:<}" }; } 
@@ -191,7 +195,7 @@ fn main() {
                 // println!("nanos between msgs: {} total from {}", last_elapsed, addr);
                 println!("avg msgs per sec: {} total from {}", (1_000_000_000f32 / avg_elapsed as f32), addr);
                 let (_, packet) = rosc::decoder::decode_udp(&buf[..size]).unwrap();
-                handle_packet(packet, &mut dirt_state, &mut msg_window, &param_configs);
+                handle_packet(packet, &mut dirt_state, &mut msg_window, &param_configs, cli.only_changed);
 
                 match elapsed_time.elapsed() {
                     Ok(elapsed) => {
@@ -216,13 +220,13 @@ fn main() {
     }
 }
 
-fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<DirtMessage>, param_configs: &HashMap<String, ParamDisplayConfig>) {
+fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<DirtMessage>, param_configs: &HashMap<String, ParamDisplayConfig>, only_changed: bool) {
     match packet {
         OscPacket::Message(msg) => {
             let packet_args = msg.args;
             params::update_dirt_state(dirt_state, packet_args, msg_window);
 
-            dirt_display::display_dirt(dirt_state, msg_window, param_configs);
+            dirt_display::display_dirt(dirt_state, msg_window, param_configs, only_changed);
 
         }
         OscPacket::Bundle(_bundle) => {

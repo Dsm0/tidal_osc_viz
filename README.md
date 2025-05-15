@@ -13,7 +13,7 @@ all the params + ranges are set in `src/dirt_display.rs`
 
 ex:
 `
-cargo run -- --listen-addr 127.0.0.1:57120 \
+cargo run -- --listen-addr 127.0.0.1:5224 \
   --param-display "delta:f32:raw" \
   --param-display "n:f32:custom_float" \
   --param-display "s:string:raw" \
