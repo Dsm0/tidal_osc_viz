@@ -137,6 +137,10 @@ struct Cli {
     /// Maximum number of ids to display concurrently
     #[arg(long, value_name = "MAX_IDS", default_value_t = 1, help = "Maximum number of ids to display concurrently")]
     id_display_max: usize,
+
+    /// Display parameters with undefined ranges (not bar_float/bar_int) as raw. If false, these are not displayed.
+    #[arg(long, action = clap::ArgAction::Set, default_value_t = false, help = "Display parameters with undefined ranges (not bar_float/bar_int) as raw. If false, these are not displayed.")]
+    display_unknown: bool,
 }
 
 // macro_rules! PARAM_FORMAT_STR { () => { "{:<8} : {:<}" }; } 
@@ -210,7 +214,7 @@ fn main() {
                 // println!("nanos between msgs: {} total from {}", last_elapsed, addr);
                 println!("avg msgs per sec: {} total from {}", (1_000_000_000f32 / avg_elapsed as f32), addr);
                 let (_, packet) = rosc::decoder::decode_udp(&buf[..size]).unwrap();
-                handle_packet(packet, &mut dirt_state, &mut msg_window, &param_configs, cli.only_changed, cli.single_id);
+                handle_packet(packet, &mut dirt_state, &mut msg_window, &param_configs, cli.only_changed, cli.single_id, cli.display_unknown);
 
                 match elapsed_time.elapsed() {
                     Ok(elapsed) => {
@@ -235,13 +239,13 @@ fn main() {
     }
 }
 
-fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<DirtMessage>, param_configs: &Vec<(String, ParamDisplayConfig)>, only_changed: bool, single_id: bool) {
+fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<DirtMessage>, param_configs: &Vec<(String, ParamDisplayConfig)>, only_changed: bool, single_id: bool, display_unknown: bool) {
     match packet {
         OscPacket::Message(msg) => {
             let packet_args = msg.args;
             params::update_dirt_state(dirt_state, packet_args, msg_window);
 
-            dirt_display::display_dirt(dirt_state, msg_window, param_configs, only_changed, single_id);
+            dirt_display::display_dirt(dirt_state, msg_window, param_configs, only_changed, single_id, display_unknown);
 
         }
         OscPacket::Bundle(_bundle) => {

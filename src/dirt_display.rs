@@ -46,6 +46,7 @@ pub fn display_dirt(
     param_configs: &Vec<(String, crate::ParamDisplayConfig)>,
     only_changed: bool,
     single_id: bool,
+    display_unknown: bool,
 ) {
     let mut full_str = String::new();
 
@@ -91,7 +92,7 @@ pub fn display_dirt(
         if single_id {
             // Only display the most recent message (msg)
             let msg_id_owned = recent_id.cloned().unwrap_or_else(|| "?".to_string());
-            let huh = display_dirt_message(msg, None, cols, param_configs, &msg_id_owned, only_changed);
+            let huh = display_dirt_message(msg, None, cols, param_configs, &msg_id_owned, only_changed, display_unknown);
             full_str.push_str(huh.as_str());
         } else {
             for (id, current_msg_state) in dirt_state {
@@ -107,7 +108,7 @@ pub fn display_dirt(
                 } else {
                     None
                 };
-                let huh = display_dirt_message(current_msg_state, prev_msg, cols, param_configs, id, only_changed);
+                let huh = display_dirt_message(current_msg_state, prev_msg, cols, param_configs, id, only_changed, display_unknown);
                 full_str.push_str(huh.as_str());
             }
         }
@@ -127,6 +128,7 @@ fn display_dirt_message(
     param_configs: &Vec<(String, crate::ParamDisplayConfig)>,
     msg_id: &String,
     only_changed: bool,
+    display_unknown: bool,
 ) -> String {
     let display_str: &mut String = &mut String::new();
     let mut already_displayed = std::collections::HashSet::new();
@@ -154,46 +156,68 @@ fn display_dirt_message(
         let config = config;
         match config.value_type {
             crate::DisplayValueType::Float => {
-                display_str.push_str(
-                    msg.display_f32(param_name, |val| match &config.style {
-                        crate::DisplayStyle::BarFloat { min, max } => {
-                            format!("{} {}\n", display_bar_float(val, *min, *max, cols), config.label)
-                        }
-                        crate::DisplayStyle::CustomFloat => {
-                            format!("{} {}\n", display_float(val, cols), config.label)
-                        }
-                        crate::DisplayStyle::Binary16 => {
-                            format!("{} {}\n", display_bin_float(val, cols), config.label)
-                        }
-                        crate::DisplayStyle::Raw | crate::DisplayStyle::Cycle => {
-                            format!("{}: {} {}\n", param_name, val, config.label)
-                        }
-                        _ => format!("{}: {} (unsupported style for f32)\n", param_name, val),
-                    }).as_str(),
-                );
+                let show = match &config.style {
+                    crate::DisplayStyle::BarFloat { .. }
+                    | crate::DisplayStyle::CustomFloat
+                    | crate::DisplayStyle::Binary16
+                    | crate::DisplayStyle::Raw
+                    | crate::DisplayStyle::Cycle => true,
+                    _ => display_unknown,
+                };
+                if show {
+                    display_str.push_str(
+                        msg.display_f32(param_name, |val| match &config.style {
+                            crate::DisplayStyle::BarFloat { min, max } => {
+                                format!("{} {}\n", display_bar_float(val, *min, *max, cols), config.label)
+                            }
+                            crate::DisplayStyle::CustomFloat => {
+                                format!("{} {}\n", display_float(val, cols), config.label)
+                            }
+                            crate::DisplayStyle::Binary16 => {
+                                format!("{} {}\n", display_bin_float(val, cols), config.label)
+                            }
+                            crate::DisplayStyle::Raw | crate::DisplayStyle::Cycle => {
+                                format!("{}: {} {}\n", param_name, val, config.label)
+                            }
+                            _ => format!("{}: {} (unsupported style for f32)\n", param_name, val),
+                        }).as_str(),
+                    );
+                }
             }
             crate::DisplayValueType::Integer => {
-                display_str.push_str(
-                    msg.display_i32(param_name, |val| match &config.style {
-                        crate::DisplayStyle::BarInt { min, max } => {
-                            format!("{} {}\n", display_bar_int(val, *min, *max, cols), config.label)
-                        }
-                        crate::DisplayStyle::Raw => {
-                            format!("{}: {} {}\n", param_name, val, config.label)
-                        }
-                        _ => format!("{}: {} (unsupported style for i32)\n", param_name, val),
-                    }).as_str(),
-                );
+                let show = match &config.style {
+                    crate::DisplayStyle::BarInt { .. } | crate::DisplayStyle::Raw => true,
+                    _ => display_unknown,
+                };
+                if show {
+                    display_str.push_str(
+                        msg.display_i32(param_name, |val| match &config.style {
+                            crate::DisplayStyle::BarInt { min, max } => {
+                                format!("{} {}\n", display_bar_int(val, *min, *max, cols), config.label)
+                            }
+                            crate::DisplayStyle::Raw => {
+                                format!("{}: {} {}\n", param_name, val, config.label)
+                            }
+                            _ => format!("{}: {} (unsupported style for i32)\n", param_name, val),
+                        }).as_str(),
+                    );
+                }
             }
             crate::DisplayValueType::String => {
-                display_str.push_str(
-                    msg.display_string(param_name, |val| match &config.style {
-                        crate::DisplayStyle::Raw => {
-                            format!("{}: {} {}\n", param_name, val, config.label)
-                        }
-                        _ => format!("{}: {} (unsupported style for string)\n", param_name, val),
-                    }).as_str(),
-                );
+                let show = match &config.style {
+                    crate::DisplayStyle::Raw => true,
+                    _ => display_unknown,
+                };
+                if show {
+                    display_str.push_str(
+                        msg.display_string(param_name, |val| match &config.style {
+                            crate::DisplayStyle::Raw => {
+                                format!("{}: {} {}\n", param_name, val, config.label)
+                            }
+                            _ => format!("{}: {} (unsupported style for string)\n", param_name, val),
+                        }).as_str(),
+                    );
+                }
             }
         }
     }
@@ -215,11 +239,13 @@ fn display_dirt_message(
                 }
             }
         }
-        match msg.get(param_name) {
-            Some(DirtValue::DF(f)) => display_str.push_str(&format!("{}: {}\n", param_name, f)),
-            Some(DirtValue::DI(i)) => display_str.push_str(&format!("{}: {}\n", param_name, i)),
-            Some(DirtValue::DS(s)) => display_str.push_str(&format!("{}: {}\n", param_name, s)),
-            None => {}
+        if display_unknown {
+            match msg.get(param_name) {
+                Some(DirtValue::DF(f)) => display_str.push_str(&format!("{}: {}\n", param_name, f)),
+                Some(DirtValue::DI(i)) => display_str.push_str(&format!("{}: {}\n", param_name, i)),
+                Some(DirtValue::DS(s)) => display_str.push_str(&format!("{}: {}\n", param_name, s)),
+                None => {}
+            }
         }
     }
     display_str.to_string()
