@@ -125,6 +125,14 @@ struct Cli {
     /// Only display parameters for a given id that have changed since the previous message with that id
     #[arg(long, action = clap::ArgAction::SetTrue, help = "Only display parameters for a given id that have changed since the previous message with that id")]
     only_changed: bool,
+
+    /// Only display parameters from the last message received (single id mode)
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Only display parameters from the last message received (single id mode)")]
+    single_id: bool,
+
+    /// Flash raw data to the screen (debug)
+    #[arg(long, action = clap::ArgAction::SetTrue, help = "Flash raw data to the screen (debug)")]
+    flash_data: bool,
 }
 
 // macro_rules! PARAM_FORMAT_STR { () => { "{:<8} : {:<}" }; } 
@@ -145,8 +153,8 @@ fn main() {
         }
     }
 
-    let WINDOW_SIZE: usize = 100;
-    let TIME_WINDOW_SIZE: usize = 10;
+    let WINDOW_SIZE: usize = 1;
+    let TIME_WINDOW_SIZE: usize = 1;
     let args: Vec<String> = env::args().collect();
     let usage = format!("Usage {} IP:PORT", &args[0]);
     
@@ -188,14 +196,17 @@ fn main() {
                 };
 
                 // dirt_display::display_text(&(("/".repeat(cols) + "\n")).repeat(rows));
-                dirt_display::display_text(&format!("{:?}",dirt_state));
+
+                if cli.flash_data {
+                    dirt_display::display_text(&format!("{:?}",dirt_state));
+                }
                 thread::sleep(Duration::from_nanos(1000000));
 
                 bytes_recieved_in_sec = bytes_recieved_in_sec + size;
                 // println!("nanos between msgs: {} total from {}", last_elapsed, addr);
                 println!("avg msgs per sec: {} total from {}", (1_000_000_000f32 / avg_elapsed as f32), addr);
                 let (_, packet) = rosc::decoder::decode_udp(&buf[..size]).unwrap();
-                handle_packet(packet, &mut dirt_state, &mut msg_window, &param_configs, cli.only_changed);
+                handle_packet(packet, &mut dirt_state, &mut msg_window, &param_configs, cli.only_changed, cli.single_id);
 
                 match elapsed_time.elapsed() {
                     Ok(elapsed) => {
@@ -220,13 +231,13 @@ fn main() {
     }
 }
 
-fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<DirtMessage>, param_configs: &HashMap<String, ParamDisplayConfig>, only_changed: bool) {
+fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<DirtMessage>, param_configs: &HashMap<String, ParamDisplayConfig>, only_changed: bool, single_id: bool) {
     match packet {
         OscPacket::Message(msg) => {
             let packet_args = msg.args;
             params::update_dirt_state(dirt_state, packet_args, msg_window);
 
-            dirt_display::display_dirt(dirt_state, msg_window, param_configs, only_changed);
+            dirt_display::display_dirt(dirt_state, msg_window, param_configs, only_changed, single_id);
 
         }
         OscPacket::Bundle(_bundle) => {

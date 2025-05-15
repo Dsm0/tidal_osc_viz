@@ -45,6 +45,7 @@ pub fn display_dirt(
     dirt_window: &DirtWindow,
     param_configs: &HashMap<String, crate::ParamDisplayConfig>,
     only_changed: bool,
+    single_id: bool,
 ) {
     let mut full_str = String::new();
 
@@ -70,22 +71,45 @@ pub fn display_dirt(
             full_str.push_str(msg.display_f32("cycle", |f| display_cycle(f, cols)).as_str());
         }
 
-        for (id, current_msg_state) in dirt_state {
-            if id == "tick" { continue; }
-            // Find previous message for this id in dirt_window (skip the most recent)
-            let prev_msg = if only_changed {
-                dirt_window.iter().skip(1).find(|m| {
-                    if let Some(DirtValue::DS(prev_id)) = m.get("_id_") {
-                        prev_id == id
-                    } else {
-                        false
-                    }
-                })
+        // Display ids '1' through '9' across the top, with the most recent id in braces
+        let mut id_line = String::new();
+        let recent_id = msg.get("_id_").and_then(|v| if let DirtValue::DS(s) = v { Some(s) } else { None });
+        for n in 1..=9 {
+            let n_str = n.to_string();
+            if let Some(recent) = recent_id {
+                if &n_str == recent {
+                    id_line.push_str(&format!("{{{}}} ", n));
+                } else {
+                    id_line.push_str(&format!(" {}  ", n));
+                }
             } else {
-                None
-            };
-            let huh = display_dirt_message(current_msg_state, prev_msg, cols, param_configs, id, only_changed);
+                id_line.push_str(&format!(" {}  ", n));
+            }
+        }
+        full_str.push_str(&format!("\n{}\n\n", id_line));
+
+        if single_id {
+            // Only display the most recent message (msg)
+            let msg_id_owned = recent_id.cloned().unwrap_or_else(|| "?".to_string());
+            let huh = display_dirt_message(msg, None, cols, param_configs, &msg_id_owned, only_changed);
             full_str.push_str(huh.as_str());
+        } else {
+            for (id, current_msg_state) in dirt_state {
+                if id == "tick" { continue; }
+                let prev_msg = if only_changed {
+                    dirt_window.iter().skip(1).find(|m| {
+                        if let Some(DirtValue::DS(prev_id)) = m.get("_id_") {
+                            prev_id == id
+                        } else {
+                            false
+                        }
+                    })
+                } else {
+                    None
+                };
+                let huh = display_dirt_message(current_msg_state, prev_msg, cols, param_configs, id, only_changed);
+                full_str.push_str(huh.as_str());
+            }
         }
 
         full_str.push_str(msg.display_raw().as_str());
@@ -105,7 +129,6 @@ fn display_dirt_message(
     only_changed: bool,
 ) -> String {
     let display_str: &mut String = &mut String::new();
-    display_str.push_str(&format!("{:<15}{} id\n", "", msg_id));
     let mut sorted_params: Vec<_> = msg.keys().collect();
     sorted_params.sort();
     for param_name_str in sorted_params {
@@ -122,7 +145,7 @@ fn display_dirt_message(
                         }
                     }
                 }
-            }
+            } // If prev_msg is None, do not skip any params (show all)
         }
         if let Some(config) = param_configs.get(param_name) {
             match config.value_type {
