@@ -329,9 +329,20 @@ fn display_bin_float(f: &f32, _cols: usize) -> String { // cols might not be use
 fn display_float(f: &f32, cols: usize) -> String {
     // Clamp value between 0.0 and 1.0 for bar rendering
     let clamped = (*f).max(0.0).min(1.0);
-    let bar_len = (clamped * cols as f32).round() as usize;
-    let bar = "█".repeat(bar_len);
-    let empty = " ".repeat(cols.saturating_sub(bar_len));
+    let total_units = BAR_CHARS.len() * cols;
+    let filled_units = (clamped * total_units as f32).round() as usize;
+    let full_blocks = filled_units / BAR_CHARS.len();
+    let partial_index = filled_units % BAR_CHARS.len();
+
+    let mut bar = String::new();
+    if full_blocks > 0 {
+        bar.push_str(&BOX.repeat(full_blocks));
+    }
+    if partial_index > 0 {
+        bar.push_str(BAR_CHARS[partial_index]);
+    }
+    let bar_width = full_blocks + if partial_index > 0 { 1 } else { 0 };
+    let empty = " ".repeat(cols.saturating_sub(bar_width));
     format!("|{}{}| {:.4}", bar, empty, f)
 }
 

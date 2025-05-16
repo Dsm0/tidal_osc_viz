@@ -161,8 +161,8 @@ fn main() {
         }
     }
 
-    let WINDOW_SIZE: usize = 1;
-    let TIME_WINDOW_SIZE: usize = 1;
+    let WINDOW_SIZE: usize = 32;
+    let TIME_WINDOW_SIZE: usize = 100;
     let args: Vec<String> = env::args().collect();
     let usage = format!("Usage {} IP:PORT", &args[0]);
     
