@@ -319,16 +319,20 @@ pub fn display_bar_float(f: &f32, min: f32, max: f32, cols: usize) -> String {
 fn display_bar_int(i: &i32, min: i32, max: i32, cols: usize) -> String {
     let mut temp_str = String::new();
     
-    let mut trueMax = max;
+    let mut true_max = max;
     if *i > max {
-        trueMax = *i + 1;
+        true_max = *i + 1;
     }
 
-    for j in min..(trueMax){
+    // Calculate the width needed for each number
+    let max_width = true_max.to_string().len().max(min.to_string().len())-1;
+    let item_width = max_width + 2; // Add 2 for spacing on either side
+    
+    for j in min..true_max {
         if *i == j {
-            temp_str.push_str(format!(" [{}] ", j).as_str())
+            temp_str.push_str(&format!("[{:^width$}]", j, width = max_width));
         } else {
-            temp_str.push_str(format!(" {} ", j).as_str())
+            temp_str.push_str(&format!(" {:^width$} ", j, width = max_width));
         }
     }
 
