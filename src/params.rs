@@ -142,18 +142,21 @@ pub fn update_dirt_state(dirt_state: &mut DirtState, new_msg_args: Vec<OscType>,
         let msg_to_remove = msg_window.pop_back();
         match msg_to_remove.expect("REASON").0.get("_id_") {
             Some(DirtValue::DS(id)) => {
-                dirt_state.insert(id.to_string(),HashMap::new());
+                // Don't remove from dirt_state anymore, we'll keep track of all IDs
+                // and filter based on last seen time
+                // dirt_state.insert(id.to_string(),HashMap::new());
             }
             _ => {}
         }
     }
 
+    let current_time = SystemTime::now();
+    
     if let Some(old_dirt_msg) = dirt_state.get_mut(&id) {
-
         update_dirt_message(old_dirt_msg, new_msg_args);
         
         msg_window.push_front((old_dirt_msg.to_owned(), MessageInfo {
-            timestamp: SystemTime::now(),
+            timestamp: current_time,
             should_show_braces: true,
         }));
     } else {
@@ -161,7 +164,7 @@ pub fn update_dirt_state(dirt_state: &mut DirtState, new_msg_args: Vec<OscType>,
         dirt_state.insert(id, dirt_msg.clone());
 
         msg_window.push_front((dirt_msg, MessageInfo {
-            timestamp: SystemTime::now(),
+            timestamp: current_time,
             should_show_braces: true,
         }));
     }

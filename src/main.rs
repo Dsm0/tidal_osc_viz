@@ -52,6 +52,39 @@ pub struct ParamDisplayConfig {
     pub label: String, // e.g., " gain", " s"
 }
 
+#[derive(Debug, Clone)]
+pub struct CycleInfo {
+    pub last_cps: f32,
+    pub ms_per_cycle: f32,
+    pub last_update: SystemTime,
+}
+
+impl Default for CycleInfo {
+    fn default() -> Self {
+        Self {
+            last_cps: 0.5, // Default to 0.5 cycles per second if not specified
+            ms_per_cycle: 2000.0, // 2000ms per cycle at 0.5 cps
+            last_update: SystemTime::now(),
+        }
+    }
+}
+
+impl CycleInfo {
+    pub fn update_cps(&mut self, cps: f32) {
+        self.last_cps = cps;
+        self.ms_per_cycle = if cps > 0.0 { 1000.0 / cps } else { 2000.0 }; // Default to 2000ms if cps is 0 or negative
+        self.last_update = SystemTime::now();
+    }
+    
+    pub fn is_id_active(&self, last_seen: SystemTime) -> bool {
+        if let Ok(elapsed) = SystemTime::now().duration_since(last_seen) {
+            elapsed.as_millis() as f32 <= self.ms_per_cycle
+        } else {
+            false
+        }
+    }
+}
+
 fn parse_param_display_arg(arg_val: &str) -> Result<(String, ParamDisplayConfig), String> {
     let parts: Vec<&str> = arg_val.split(':').collect();
     if parts.len() < 3 || parts.len() > 5 {
@@ -215,6 +248,7 @@ fn main() {
 
     let msg_window: Arc<Mutex<DirtWindow>> = Arc::new(Mutex::new(params::new_dirt_window(WINDOW_SIZE)));
     let dirt_state: Arc<Mutex<DirtState>> = Arc::new(Mutex::new(HashMap::new()));
+    let cycle_info: Arc<Mutex<CycleInfo>> = Arc::new(Mutex::new(CycleInfo::default()));
     
     let param_configs_arc = Arc::new(param_configs);
     let cli_only_changed = cli.only_changed;
@@ -227,6 +261,7 @@ fn main() {
     let msg_window_clone = Arc::clone(&msg_window);
     let dirt_state_clone = Arc::clone(&dirt_state);
     let param_configs_clone = Arc::clone(&param_configs_arc);
+    let cycle_info_clone = Arc::clone(&cycle_info);
     let addr_clone = addr.clone();
     let avg_elapsed_arc = Arc::new(Mutex::new(0_u128));
     let avg_elapsed_clone = Arc::clone(&avg_elapsed_arc);
@@ -254,8 +289,10 @@ fn main() {
             // Only redraw the visualization if we changed something
             if updated {
                 let state_lock = dirt_state_clone.lock().unwrap();
+                let cycle_lock = cycle_info_clone.lock().unwrap();
                 dirt_display::display_dirt(&state_lock, &window_lock, &param_configs_clone, 
-                    cli_only_changed, cli_single_id, cli_display_unknown, cli_prevent_overflow, cli_static_spacing);
+                    cli_only_changed, cli_single_id, cli_display_unknown, cli_prevent_overflow, cli_static_spacing,
+                    &cycle_lock);
                 
                 // Always update the stats line after redrawing
                 let avg_elapsed = *avg_elapsed_clone.lock().unwrap();
@@ -305,8 +342,10 @@ fn main() {
                 // Process the packet with the shared data structures
                 let mut window_lock = msg_window.lock().unwrap();
                 let mut state_lock = dirt_state.lock().unwrap();
+                let mut cycle_lock = cycle_info.lock().unwrap();
                 handle_packet(packet, &mut state_lock, &mut window_lock, &param_configs_arc, 
-                    cli_only_changed, cli_single_id, cli_display_unknown, cli_prevent_overflow, cli_static_spacing);
+                    cli_only_changed, cli_single_id, cli_display_unknown, cli_prevent_overflow, cli_static_spacing,
+                    &mut cycle_lock);
 
                 match elapsed_time.elapsed() {
                     Ok(elapsed) => {
@@ -337,14 +376,27 @@ fn main() {
     }
 }
 
-fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<params::DirtTimestampedMessage>, param_configs: &Vec<(String, ParamDisplayConfig)>, only_changed: bool, single_id: bool, display_unknown: bool, prevent_overflow: bool, static_spacing: bool) {
+fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<params::DirtTimestampedMessage>, param_configs: &Vec<(String, ParamDisplayConfig)>, only_changed: bool, single_id: bool, display_unknown: bool, prevent_overflow: bool, static_spacing: bool, cycle_info: &mut CycleInfo) {
     match packet {
         OscPacket::Message(msg) => {
             let packet_args = msg.args;
+            
+            // Check for cps parameter and update cycle_info if found
+            for i in (0..packet_args.len()).step_by(2) {
+                if i + 1 < packet_args.len() {
+                    if let rosc::OscType::String(param_name) = &packet_args[i] {
+                        if param_name == "cps" {
+                            if let rosc::OscType::Float(cps_value) = packet_args[i + 1] {
+                                cycle_info.update_cps(cps_value);
+                            }
+                        }
+                    }
+                }
+            }
+            
             params::update_dirt_state(dirt_state, packet_args, msg_window);
 
-            dirt_display::display_dirt(dirt_state, msg_window, param_configs, only_changed, single_id, display_unknown, prevent_overflow, static_spacing);
-
+            dirt_display::display_dirt(dirt_state, msg_window, param_configs, only_changed, single_id, display_unknown, prevent_overflow, static_spacing, cycle_info);
         }
         OscPacket::Bundle(_bundle) => {
             // println!("OSC Bundle: {:?}", bundle);

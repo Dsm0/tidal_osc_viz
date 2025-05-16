@@ -66,6 +66,7 @@ pub fn display_dirt(
     display_unknown: bool,
     prevent_overflow: bool,
     static_spacing: bool,
+    cycle_info: &crate::CycleInfo,
 ) {
     let mut full_str = String::new();
 
@@ -98,6 +99,10 @@ pub fn display_dirt(
         } else {
             full_str.push_str(msg.display_f32("cycle", |f| display_cycle(f, cols)).as_str());
         }
+
+        // Display the current cps and ms_per_cycle values
+        full_str.push_str(&format!("cps: {:.2} | ms per cycle: {:.0}\n\n", 
+            cycle_info.last_cps, cycle_info.ms_per_cycle));
 
         // Display ids '1' through '9' across the top, with the most recent id(s) in braces if should_show_braces is true
         let mut id_line = String::new();
@@ -160,17 +165,23 @@ pub fn display_dirt(
                         None
                     };
                     
-                    // Check if this ID has been recently received (exists in the window)
-                    let is_recent = dirt_window.iter().any(|(m, _)| {
-                        if let Some(DirtValue::DS(msg_id)) = m.get("_id_") {
-                            msg_id == id
-                        } else {
-                            false
-                        }
-                    });
+                    // Find the most recent timestamp for this ID in the window
+                    let last_seen = dirt_window.iter()
+                        .find(|(m, _)| {
+                            if let Some(DirtValue::DS(msg_id)) = m.get("_id_") {
+                                msg_id == id
+                            } else {
+                                false
+                            }
+                        })
+                        .map(|(_, info)| info.timestamp)
+                        .unwrap_or_else(|| SystemTime::now() - Duration::from_secs(3600)); // Default to an hour ago if not found
                     
-                    // Only display if it's either recent or static_spacing is enabled
-                    if is_recent || static_spacing {
+                    // Check if this ID has been seen within the last cycle period
+                    let is_active = cycle_info.is_id_active(last_seen);
+                    
+                    // Only display if it's either active or static_spacing is enabled
+                    if is_active || static_spacing {
                         // Add separator with ID
                         full_str.push_str(&create_id_separator(id, cols));
                         
