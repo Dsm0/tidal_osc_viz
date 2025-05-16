@@ -24,6 +24,8 @@ use std::collections::HashMap;
 
 use std::cmp::{PartialEq, Eq};
 
+use std::time::{SystemTime, Duration};
+
 static RIGHT_SPACE: i32 = 25;
 
 // NOTE: will probably replace when I get to using a tui library
@@ -58,7 +60,7 @@ pub fn display_dirt(
         }
     };
 
-    if let Some(msg) = dirt_window.front() {
+    if let Some((msg, msg_time)) = dirt_window.front() {
         if let Some(config) = param_configs.iter().find(|(name, _)| name == "cycle") {
             match config.1.style {
                 crate::DisplayStyle::Cycle => {
@@ -72,17 +74,27 @@ pub fn display_dirt(
             full_str.push_str(msg.display_f32("cycle", |f| display_cycle(f, cols)).as_str());
         }
 
-        // Display ids '1' through '9' across the top, with the most recent id in braces
+        // Display ids '1' through '9' across the top, with the most recent id(s) in braces
         let mut id_line = String::new();
-        let recent_id = msg.get("_id_").and_then(|v| if let DirtValue::DS(s) = v { Some(s) } else { None });
+        // Find all ids in the window within 10ms of the most recent
+        let mut recent_ids = vec![];
+        if let Some((_, most_recent_time)) = dirt_window.front() {
+            let mut seen_ids = std::collections::HashSet::new();
+            for (m, t) in dirt_window.iter() {
+                if let Some(DirtValue::DS(id)) = m.get("_id_") {
+                    if seen_ids.contains(id) { continue; }
+                    let dt = most_recent_time.duration_since(*t).unwrap_or(Duration::from_millis(0));
+                    if dt <= Duration::from_millis(10) {
+                        recent_ids.push(id.clone());
+                        seen_ids.insert(id.clone());
+                    }
+                }
+            }
+        }
         for n in 1..=9 {
             let n_str = n.to_string();
-            if let Some(recent) = recent_id {
-                if &n_str == recent {
-                    id_line.push_str(&format!("{{{}}} ", n));
-                } else {
-                    id_line.push_str(&format!(" {}  ", n));
-                }
+            if recent_ids.contains(&n_str) {
+                id_line.push_str(&format!("{{{}}} ", n));
             } else {
                 id_line.push_str(&format!(" {}  ", n));
             }
@@ -91,20 +103,20 @@ pub fn display_dirt(
 
         if single_id {
             // Only display the most recent message (msg)
-            let msg_id_owned = recent_id.cloned().unwrap_or_else(|| "?".to_string());
+            let msg_id_owned = msg.get("_id_").and_then(|v| if let DirtValue::DS(s) = v { Some(s.clone()) } else { None }).unwrap_or_else(|| "?".to_string());
             let huh = display_dirt_message(msg, None, cols, param_configs, &msg_id_owned, only_changed, display_unknown);
             full_str.push_str(huh.as_str());
         } else {
             for (id, current_msg_state) in dirt_state {
                 if id == "tick" { continue; }
                 let prev_msg = if only_changed {
-                    dirt_window.iter().skip(1).find(|m| {
+                    dirt_window.iter().skip(1).find(|(m, _)| {
                         if let Some(DirtValue::DS(prev_id)) = m.get("_id_") {
                             prev_id == id
                         } else {
                             false
                         }
-                    })
+                    }).map(|(m,_)| m)
                 } else {
                     None
                 };

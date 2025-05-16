@@ -1,5 +1,6 @@
 use rosc::OscType;
 use std::collections::{HashMap, VecDeque};
+use std::time::SystemTime;
 
 #[derive(Clone, Debug)]
 pub enum DirtValue {
@@ -27,7 +28,8 @@ pub trait GetDirtValue {
 pub type DirtParamName = String;
 pub type DirtMessage = HashMap<DirtParamName, DirtValue>;
 pub type DirtState = HashMap<String, DirtMessage>;
-pub type DirtWindow = VecDeque<DirtMessage>;
+pub type DirtTimestampedMessage = (DirtMessage, SystemTime);
+pub type DirtWindow = VecDeque<DirtTimestampedMessage>;
 
 impl GetDirtValue for &DirtMessage {
     fn display_i32<F>(&self, param_name: &str, display_func: F) -> String
@@ -121,7 +123,7 @@ fn update_dirt_message(dirt_message: &mut DirtMessage, new_msg_args: Vec<OscType
     }
 }
 
-pub fn update_dirt_state(dirt_state: &mut DirtState, new_msg_args: Vec<OscType>, msg_window: &mut VecDeque<DirtMessage>) {
+pub fn update_dirt_state(dirt_state: &mut DirtState, new_msg_args: Vec<OscType>, msg_window: &mut VecDeque<DirtTimestampedMessage>) {
     if new_msg_args.len() < 2 { // Need at least _id_ and its value
         return;
     }
@@ -133,7 +135,7 @@ pub fn update_dirt_state(dirt_state: &mut DirtState, new_msg_args: Vec<OscType>,
 
     if msg_window.len() > 10 {
         let msg_to_remove = msg_window.pop_back();
-        match msg_to_remove.expect("REASON").get("_id_") {
+        match msg_to_remove.expect("REASON").0.get("_id_") {
             Some(DirtValue::DS(id)) => {
                 dirt_state.insert(id.to_string(),HashMap::new());
             }
@@ -145,12 +147,12 @@ pub fn update_dirt_state(dirt_state: &mut DirtState, new_msg_args: Vec<OscType>,
 
         update_dirt_message(old_dirt_msg, new_msg_args);
         
-        msg_window.push_front(old_dirt_msg.to_owned());
+        msg_window.push_front((old_dirt_msg.to_owned(), SystemTime::now()));
     } else {
         let dirt_msg = to_dirt_message(new_msg_args);
         dirt_state.insert(id, dirt_msg.clone());
 
-        msg_window.push_front(dirt_msg);
+        msg_window.push_front((dirt_msg, SystemTime::now()));
     }
 
 
