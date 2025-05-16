@@ -11,16 +11,18 @@ use clap::Parser;
 
 use std::collections::{HashMap, VecDeque};
 use std::env;
-use std::io::stdout;
-use std::net::{SocketAddrV4, UdpSocket};
+use std::io::{stdout, Write};
+use std::net::{SocketAddrV4, UdpSocket, SocketAddr};
 use std::str::FromStr;
 
 use std::time::SystemTime;
 use std::time::Duration;
 
 use std::thread;
+use std::sync::{Arc, Mutex};
 
 use crossterm::terminal::size as term_size;
+use crossterm::cursor;
 
 mod params;
 mod string_constants;
@@ -145,6 +147,33 @@ struct Cli {
 
 // macro_rules! PARAM_FORMAT_STR { () => { "{:<8} : {:<}" }; } 
 
+// This function will display the statistics line at the bottom without clearing the screen
+fn display_stats(avg_msgs_per_sec: f32, addr: &SocketAddrV4) {
+    let (cols, rows) = {
+        if let Ok((cols, rows)) = term_size() {
+            (cols as usize, rows as usize)
+        } else {
+            (1, 1)
+        }
+    };
+    
+    // Save cursor position
+    let mut stdout = stdout();
+    stdout.execute(cursor::SavePosition).unwrap();
+    
+    // Move to the last row
+    stdout.execute(cursor::MoveTo(0, (rows - 1) as u16)).unwrap();
+    
+    // Clear the line and write the stats
+    stdout.execute(terminal::Clear(terminal::ClearType::CurrentLine)).unwrap();
+    let stats_msg = format!("avg msgs per sec: {} from {}", avg_msgs_per_sec, addr);
+    write!(stdout, "{}", stats_msg).unwrap();
+    
+    // Restore cursor position
+    stdout.execute(cursor::RestorePosition).unwrap();
+    stdout.flush().unwrap();
+}
+
 fn main() {
     let cli = Cli::parse();
 
@@ -176,15 +205,63 @@ fn main() {
     let sock = UdpSocket::bind(addr).unwrap();
     // println!("Listening to {}", addr);
 
-    let mut msg_window: DirtWindow = params::new_dirt_window(WINDOW_SIZE);
+    let msg_window: Arc<Mutex<DirtWindow>> = Arc::new(Mutex::new(params::new_dirt_window(WINDOW_SIZE)));
+    let dirt_state: Arc<Mutex<DirtState>> = Arc::new(Mutex::new(HashMap::new()));
+    
+    let param_configs_arc = Arc::new(param_configs);
+    let cli_only_changed = cli.only_changed;
+    let cli_single_id = cli.single_id;
+    let cli_display_unknown = cli.display_unknown;
+    
+    // Create a thread to update the display and handle the flashing braces
+    let msg_window_clone = Arc::clone(&msg_window);
+    let dirt_state_clone = Arc::clone(&dirt_state);
+    let param_configs_clone = Arc::clone(&param_configs_arc);
+    let addr_clone = addr.clone();
+    let avg_elapsed_arc = Arc::new(Mutex::new(0_u128));
+    let avg_elapsed_clone = Arc::clone(&avg_elapsed_arc);
+    
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_millis(10)); // Update every 10 ms
+            
+            let mut window_lock = msg_window_clone.lock().unwrap();
+            let mut updated = false;
+            
+            // Update should_show_braces flag for messages older than 200ms
+            let now = SystemTime::now();
+            for (_, info) in window_lock.iter_mut() {
+                if info.should_show_braces {
+                    if let Ok(elapsed) = now.duration_since(info.timestamp) {
+                        if elapsed > Duration::from_millis(200) {
+                            info.should_show_braces = false;
+                            updated = true;
+                        }
+                    }
+                }
+            }
+            
+            // Only redraw the visualization if we changed something
+            if updated {
+                let state_lock = dirt_state_clone.lock().unwrap();
+                dirt_display::display_dirt(&state_lock, &window_lock, &param_configs_clone, 
+                    cli_only_changed, cli_single_id, cli_display_unknown);
+                
+                // Always update the stats line after redrawing
+                let avg_elapsed = *avg_elapsed_clone.lock().unwrap();
+                if avg_elapsed > 0 {
+                    display_stats(1_000_000_000f32 / avg_elapsed as f32, &addr_clone);
+                }
+            }
+        }
+    });
+
     let mut time_window: VecDeque<u128> = VecDeque::with_capacity(TIME_WINDOW_SIZE);
     for i in 0..TIME_WINDOW_SIZE {
         time_window.push_front(42);
     }
 
     let mut buf = [0u8; rosc::decoder::MTU];
-
-    let mut dirt_state: DirtState = HashMap::new();
 
     let start_time = SystemTime::now();
     let mut elapsed_time = SystemTime::now();
@@ -206,15 +283,20 @@ fn main() {
                 // dirt_display::display_text(&(("/".repeat(cols) + "\n")).repeat(rows));
 
                 if cli.flash_data {
-                    dirt_display::display_text(&format!("{:?}",dirt_state));
+                    let state_lock = dirt_state.lock().unwrap();
+                    dirt_display::display_text(&format!("{:?}", *state_lock));
                 }
                 thread::sleep(Duration::from_nanos(1000000));
 
                 bytes_recieved_in_sec = bytes_recieved_in_sec + size;
-                // println!("nanos between msgs: {} total from {}", last_elapsed, addr);
-                println!("avg msgs per sec: {} total from {}", (1_000_000_000f32 / avg_elapsed as f32), addr);
+                
                 let (_, packet) = rosc::decoder::decode_udp(&buf[..size]).unwrap();
-                handle_packet(packet, &mut dirt_state, &mut msg_window, &param_configs, cli.only_changed, cli.single_id, cli.display_unknown);
+                
+                // Process the packet with the shared data structures
+                let mut window_lock = msg_window.lock().unwrap();
+                let mut state_lock = dirt_state.lock().unwrap();
+                handle_packet(packet, &mut state_lock, &mut window_lock, &param_configs_arc, 
+                    cli_only_changed, cli_single_id, cli_display_unknown);
 
                 match elapsed_time.elapsed() {
                     Ok(elapsed) => {
@@ -222,8 +304,14 @@ fn main() {
                         last_elapsed = elapsed.as_nanos();
 
                         avg_elapsed = (time_window.iter().sum::<u128>()) / TIME_WINDOW_SIZE as u128;
+                        *avg_elapsed_arc.lock().unwrap() = avg_elapsed;
                         time_window.push_front(last_elapsed);
                         time_window.pop_back();
+                        
+                        // Display stats with our new function
+                        if let SocketAddr::V4(addr_v4) = addr {
+                            display_stats(1_000_000_000f32 / avg_elapsed as f32, &addr_v4);
+                        }
                     }
                     Err(e) => {
                         println!("couldn't get system time ?????????: {}", e);

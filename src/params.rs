@@ -9,6 +9,11 @@ pub enum DirtValue {
     DS(String),
 }
 
+#[derive(Clone, Debug)]
+pub struct MessageInfo {
+    pub timestamp: SystemTime,
+    pub should_show_braces: bool,
+}
 
 // working in Tidal, you should know what params have which types
 
@@ -28,7 +33,7 @@ pub trait GetDirtValue {
 pub type DirtParamName = String;
 pub type DirtMessage = HashMap<DirtParamName, DirtValue>;
 pub type DirtState = HashMap<String, DirtMessage>;
-pub type DirtTimestampedMessage = (DirtMessage, SystemTime);
+pub type DirtTimestampedMessage = (DirtMessage, MessageInfo);
 pub type DirtWindow = VecDeque<DirtTimestampedMessage>;
 
 impl GetDirtValue for &DirtMessage {
@@ -147,16 +152,19 @@ pub fn update_dirt_state(dirt_state: &mut DirtState, new_msg_args: Vec<OscType>,
 
         update_dirt_message(old_dirt_msg, new_msg_args);
         
-        msg_window.push_front((old_dirt_msg.to_owned(), SystemTime::now()));
+        msg_window.push_front((old_dirt_msg.to_owned(), MessageInfo {
+            timestamp: SystemTime::now(),
+            should_show_braces: true,
+        }));
     } else {
         let dirt_msg = to_dirt_message(new_msg_args);
         dirt_state.insert(id, dirt_msg.clone());
 
-        msg_window.push_front((dirt_msg, SystemTime::now()));
+        msg_window.push_front((dirt_msg, MessageInfo {
+            timestamp: SystemTime::now(),
+            should_show_braces: true,
+        }));
     }
-
-
-
 }
 
 fn get_id(msg0: OscType, msg1: OscType) -> String {

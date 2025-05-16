@@ -8,6 +8,7 @@ use crate::params::DirtState;
 use crate::params::DirtValue;
 use crate::params::DirtWindow;
 use crate::params::GetDirtValue;
+use crate::params::MessageInfo;
 // use crate::params::DirtDisplayMap;
 
 use crossterm::{cursor, terminal, ExecutableCommand};
@@ -60,7 +61,7 @@ pub fn display_dirt(
         }
     };
 
-    if let Some((msg, msg_time)) = dirt_window.front() {
+    if let Some((msg, info)) = dirt_window.front() {
         if let Some(config) = param_configs.iter().find(|(name, _)| name == "cycle") {
             match config.1.style {
                 crate::DisplayStyle::Cycle => {
@@ -74,26 +75,26 @@ pub fn display_dirt(
             full_str.push_str(msg.display_f32("cycle", |f| display_cycle(f, cols)).as_str());
         }
 
-        // Display ids '1' through '9' across the top, with the most recent id(s) in braces
+        // Display ids '1' through '9' across the top, with the most recent id(s) in braces if should_show_braces is true
         let mut id_line = String::new();
-        // Find all ids in the window within 10ms of the most recent
-        let mut recent_ids = vec![];
-        if let Some((_, most_recent_time)) = dirt_window.front() {
-            let mut seen_ids = std::collections::HashSet::new();
-            for (m, t) in dirt_window.iter() {
-                if let Some(DirtValue::DS(id)) = m.get("_id_") {
-                    if seen_ids.contains(id) { continue; }
-                    let dt = most_recent_time.duration_since(*t).unwrap_or(Duration::from_millis(0));
-                    if dt <= Duration::from_millis(10) {
-                        recent_ids.push(id.clone());
-                        seen_ids.insert(id.clone());
-                    }
+        // Find all ids in the window with should_show_braces set to true
+        let mut ids_with_braces = vec![];
+        
+        for (m, info) in dirt_window.iter() {
+            if !info.should_show_braces {
+                continue;
+            }
+            
+            if let Some(DirtValue::DS(id)) = m.get("_id_") {
+                if !ids_with_braces.contains(id) {
+                    ids_with_braces.push(id.clone());
                 }
             }
         }
+        
         for n in 1..=9 {
             let n_str = n.to_string();
-            if recent_ids.contains(&n_str) {
+            if ids_with_braces.contains(&n_str) {
                 id_line.push_str(&format!("{{{}}} ", n));
             } else {
                 id_line.push_str(&format!(" {}  ", n));
