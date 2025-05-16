@@ -43,6 +43,20 @@ fn float_mod(f: f32, m: f32) -> f32 {
     ((f % m) + m) % m
 }
 
+// Create a separator line with the ID label
+fn create_id_separator(id: &str, cols: usize) -> String {
+    let label = format!(" ID: {} ", id);
+    let label_len = label.len();
+    let left_dash_count = (cols - label_len) / 2;
+    let right_dash_count = cols - label_len - left_dash_count;
+    
+    format!("{}{}{}\n", 
+        "-".repeat(left_dash_count), 
+        label, 
+        "-".repeat(right_dash_count)
+    )
+}
+
 pub fn display_dirt(
     dirt_state: &DirtState,
     dirt_window: &DirtWindow,
@@ -105,24 +119,44 @@ pub fn display_dirt(
         if single_id {
             // Only display the most recent message (msg)
             let msg_id_owned = msg.get("_id_").and_then(|v| if let DirtValue::DS(s) = v { Some(s.clone()) } else { None }).unwrap_or_else(|| "?".to_string());
-            let huh = display_dirt_message(msg, None, cols, param_configs, &msg_id_owned, only_changed, display_unknown);
-            full_str.push_str(huh.as_str());
+            
+            // Check if the message has content before adding separator and displaying
+            let message_content = display_dirt_message(msg, None, cols, param_configs, &msg_id_owned, only_changed, display_unknown);
+            if !message_content.trim().is_empty() {
+                // Add separator with ID
+                full_str.push_str(&create_id_separator(&msg_id_owned, cols));
+                full_str.push_str(&message_content);
+            }
         } else {
-            for (id, current_msg_state) in dirt_state {
+            // When displaying multiple IDs, add separators between each ID's message
+            let mut ids: Vec<&String> = dirt_state.keys().collect();
+            ids.sort(); // Sort IDs for consistent display order
+            
+            for id in ids {
                 if id == "tick" { continue; }
-                let prev_msg = if only_changed {
-                    dirt_window.iter().skip(1).find(|(m, _)| {
-                        if let Some(DirtValue::DS(prev_id)) = m.get("_id_") {
-                            prev_id == id
-                        } else {
-                            false
-                        }
-                    }).map(|(m,_)| m)
-                } else {
-                    None
-                };
-                let huh = display_dirt_message(current_msg_state, prev_msg, cols, param_configs, id, only_changed, display_unknown);
-                full_str.push_str(huh.as_str());
+                
+                // Get the current message state for this ID
+                if let Some(current_msg_state) = dirt_state.get(id) {
+                    let prev_msg = if only_changed {
+                        dirt_window.iter().skip(1).find(|(m, _)| {
+                            if let Some(DirtValue::DS(prev_id)) = m.get("_id_") {
+                                prev_id == id
+                            } else {
+                                false
+                            }
+                        }).map(|(m,_)| m)
+                    } else {
+                        None
+                    };
+                    
+                    // Check if the message has content before adding separator and displaying
+                    let message_content = display_dirt_message(current_msg_state, prev_msg, cols, param_configs, id, only_changed, display_unknown);
+                    if !message_content.trim().is_empty() {
+                        // Add separator with ID
+                        full_str.push_str(&create_id_separator(id, cols));
+                        full_str.push_str(&message_content);
+                    }
+                }
             }
         }
 
