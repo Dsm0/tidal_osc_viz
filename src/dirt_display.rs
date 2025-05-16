@@ -64,6 +64,7 @@ pub fn display_dirt(
     only_changed: bool,
     single_id: bool,
     display_unknown: bool,
+    prevent_overflow: bool,
 ) {
     let mut full_str = String::new();
 
@@ -72,6 +73,14 @@ pub fn display_dirt(
             cmp::max((cols as i32) - RIGHT_SPACE, 1_i32) as usize
         } else {
             1
+        }
+    };
+
+    let rows = {
+        if let Ok((_cols, rows)) = size() {
+            rows as usize
+        } else {
+            25 // default if we can't get terminal size
         }
     };
 
@@ -114,6 +123,7 @@ pub fn display_dirt(
                 id_line.push_str(&format!(" {}  ", n));
             }
         }
+        id_line.push_str(" !!! active ids\n");
         full_str.push_str(&format!("{}\n", id_line));
 
         if single_id {
@@ -163,6 +173,38 @@ pub fn display_dirt(
         full_str.push_str(msg.display_raw().as_str());
     } else {
         full_str.push_str("Some(msg) = dirt_window.front() failed???")
+    }
+
+    // If prevent_overflow is enabled, truncate the string to fit within terminal height
+    if prevent_overflow {
+        // Calculate how many lines we can display
+        // Reserve 3 lines for stats display at the bottom
+        let max_lines = rows.saturating_sub(3);
+        
+        // Count the newlines in the string to determine height
+        let newline_count = full_str.matches('\n').count();
+        
+        if newline_count > max_lines {
+            // Truncate the string to max_lines number of lines
+            let mut current_lines = 0;
+            let mut truncation_index = 0;
+            
+            for (i, c) in full_str.char_indices() {
+                if c == '\n' {
+                    current_lines += 1;
+                    if current_lines >= max_lines {
+                        truncation_index = i + 1; // Keep the newline
+                        break;
+                    }
+                }
+            }
+            
+            if truncation_index > 0 {
+                full_str.truncate(truncation_index);
+                // Add a message indicating content was truncated
+                full_str.push_str("[Output truncated to fit terminal height]\n");
+            }
+        }
     }
 
     display_text(&full_str);
@@ -364,9 +406,9 @@ fn display_bar_int(i: &i32, min: i32, max: i32, cols: usize) -> String {
     
     for j in min..true_max {
         if *i == j {
-            temp_str.push_str(&format!("[{:^width$}]", j, width = max_width));
+            temp_str.push_str(&format!("[{:^width$}] ", j, width = max_width));
         } else {
-            temp_str.push_str(&format!(" {:^width$} ", j, width = max_width));
+            temp_str.push_str(&format!(" {:^width$}  ", j, width = max_width));
         }
     }
 
