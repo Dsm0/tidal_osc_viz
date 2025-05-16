@@ -65,6 +65,7 @@ pub fn display_dirt(
     single_id: bool,
     display_unknown: bool,
     prevent_overflow: bool,
+    static_spacing: bool,
 ) {
     let mut full_str = String::new();
 
@@ -131,7 +132,7 @@ pub fn display_dirt(
             let msg_id_owned = msg.get("_id_").and_then(|v| if let DirtValue::DS(s) = v { Some(s.clone()) } else { None }).unwrap_or_else(|| "?".to_string());
             
             // Check if the message has content before adding separator and displaying
-            let message_content = display_dirt_message(msg, None, cols, param_configs, &msg_id_owned, only_changed, display_unknown);
+            let message_content = display_dirt_message(msg, None, cols, param_configs, &msg_id_owned, only_changed, display_unknown, static_spacing);
             if !message_content.trim().is_empty() {
                 // Add separator with ID
                 full_str.push_str(&create_id_separator(&msg_id_owned, cols));
@@ -159,12 +160,35 @@ pub fn display_dirt(
                         None
                     };
                     
-                    // Check if the message has content before adding separator and displaying
-                    let message_content = display_dirt_message(current_msg_state, prev_msg, cols, param_configs, id, only_changed, display_unknown);
-                    if !message_content.trim().is_empty() {
+                    // Check if this ID has been recently received (exists in the window)
+                    let is_recent = dirt_window.iter().any(|(m, _)| {
+                        if let Some(DirtValue::DS(msg_id)) = m.get("_id_") {
+                            msg_id == id
+                        } else {
+                            false
+                        }
+                    });
+                    
+                    // Only display if it's either recent or static_spacing is enabled
+                    if is_recent || static_spacing {
                         // Add separator with ID
                         full_str.push_str(&create_id_separator(id, cols));
+                        
+                        // Display the message content
+                        let message_content = display_dirt_message(current_msg_state, prev_msg, cols, param_configs, id, only_changed, display_unknown, static_spacing);
                         full_str.push_str(&message_content);
+                    }
+                } else if static_spacing {
+                    // If static_spacing is enabled but there's no message for this ID yet,
+                    // add blank lines for each parameter in param_configs
+                    
+                    // Add separator with ID
+                    full_str.push_str(&create_id_separator(id, cols));
+                    
+                    for (param_name, _) in param_configs.iter() {
+                        if param_name != "_id_" && param_name != "cycle" {
+                            full_str.push_str("\n");
+                        }
                     }
                 }
             }
@@ -202,7 +226,7 @@ pub fn display_dirt(
             if truncation_index > 0 {
                 full_str.truncate(truncation_index);
                 // Add a message indicating content was truncated
-                full_str.push_str("[Output truncated to fit terminal height]\n");
+                full_str.push_str("...");
             }
         }
     }
@@ -218,6 +242,7 @@ fn display_dirt_message(
     msg_id: &String,
     only_changed: bool,
     display_unknown: bool,
+    static_spacing: bool,
 ) -> String {
     let display_str: &mut String = &mut String::new();
     let mut already_displayed = std::collections::HashSet::new();
@@ -227,22 +252,41 @@ fn display_dirt_message(
         if param_name == "_id_" || param_name == "cycle" {
             continue;
         }
-        if !msg.contains_key(param_name) {
+        already_displayed.insert(param_name.to_string());
+        
+        // Check if parameter exists in message
+        let param_exists = msg.contains_key(param_name);
+        
+        // Skip if not displaying static spacing and param doesn't exist
+        if !param_exists && !static_spacing {
             continue;
         }
-        already_displayed.insert(param_name.to_string());
-        if only_changed {
+        
+        // Skip if only showing changed values and this value hasn't changed
+        if only_changed && param_exists {
             if let Some(prev) = prev_msg {
                 if let Some(prev_val) = prev.get(param_name) {
                     if let Some(cur_val) = msg.get(param_name) {
                         if prev_val == cur_val {
+                            if static_spacing {
+                                // Add a blank line for unchanged parameters when static spacing is enabled
+                                display_str.push_str("\n");
+                            }
                             continue; // skip unchanged
                         }
                     }
                 }
             }
         }
+        
         let config = config;
+        
+        // If parameter doesn't exist but static spacing is enabled, add a blank line
+        if !param_exists && static_spacing {
+            display_str.push_str("\n");
+            continue;
+        }
+        
         match config.value_type {
             crate::DisplayValueType::Float => {
                 let show = match &config.style {

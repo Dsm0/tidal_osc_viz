@@ -1,6 +1,6 @@
 #!/bin/bash
 
-cargo run -- --display-unknown false --prevent-overflow true --listen-addr 127.0.0.1:5224 \
+cargo run -- --display-unknown false --static-spacing false --prevent-overflow true --listen-addr 127.0.0.1:5224 \
   --param-display "orbit:i32:bar_int:0:10" \
   --param-display "n:f32:raw" \
   --param-display "s:string:raw" \

@@ -147,6 +147,10 @@ struct Cli {
     /// Prevent text from overflowing past the height of the terminal
     #[arg(long, action = clap::ArgAction::Set, default_value_t = false, help = "Prevent text from overflowing past the height of the terminal")]
     prevent_overflow: bool,
+    
+    /// Always display all specified parameters for each ID with consistent spacing
+    #[arg(long, action = clap::ArgAction::Set, default_value_t = false, help = "Always display all specified parameters for each ID with consistent spacing")]
+    static_spacing: bool,
 }
 
 // macro_rules! PARAM_FORMAT_STR { () => { "{:<8} : {:<}" }; } 
@@ -217,6 +221,7 @@ fn main() {
     let cli_single_id = cli.single_id;
     let cli_display_unknown = cli.display_unknown;
     let cli_prevent_overflow = cli.prevent_overflow;
+    let cli_static_spacing = cli.static_spacing;
     
     // Create a thread to update the display and handle the flashing braces
     let msg_window_clone = Arc::clone(&msg_window);
@@ -250,7 +255,7 @@ fn main() {
             if updated {
                 let state_lock = dirt_state_clone.lock().unwrap();
                 dirt_display::display_dirt(&state_lock, &window_lock, &param_configs_clone, 
-                    cli_only_changed, cli_single_id, cli_display_unknown, cli_prevent_overflow);
+                    cli_only_changed, cli_single_id, cli_display_unknown, cli_prevent_overflow, cli_static_spacing);
                 
                 // Always update the stats line after redrawing
                 let avg_elapsed = *avg_elapsed_clone.lock().unwrap();
@@ -301,7 +306,7 @@ fn main() {
                 let mut window_lock = msg_window.lock().unwrap();
                 let mut state_lock = dirt_state.lock().unwrap();
                 handle_packet(packet, &mut state_lock, &mut window_lock, &param_configs_arc, 
-                    cli_only_changed, cli_single_id, cli_display_unknown, cli_prevent_overflow);
+                    cli_only_changed, cli_single_id, cli_display_unknown, cli_prevent_overflow, cli_static_spacing);
 
                 match elapsed_time.elapsed() {
                     Ok(elapsed) => {
@@ -332,13 +337,13 @@ fn main() {
     }
 }
 
-fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<params::DirtTimestampedMessage>, param_configs: &Vec<(String, ParamDisplayConfig)>, only_changed: bool, single_id: bool, display_unknown: bool, prevent_overflow: bool) {
+fn handle_packet(packet: OscPacket, dirt_state: &mut DirtState, msg_window: &mut VecDeque<params::DirtTimestampedMessage>, param_configs: &Vec<(String, ParamDisplayConfig)>, only_changed: bool, single_id: bool, display_unknown: bool, prevent_overflow: bool, static_spacing: bool) {
     match packet {
         OscPacket::Message(msg) => {
             let packet_args = msg.args;
             params::update_dirt_state(dirt_state, packet_args, msg_window);
 
-            dirt_display::display_dirt(dirt_state, msg_window, param_configs, only_changed, single_id, display_unknown, prevent_overflow);
+            dirt_display::display_dirt(dirt_state, msg_window, param_configs, only_changed, single_id, display_unknown, prevent_overflow, static_spacing);
 
         }
         OscPacket::Bundle(_bundle) => {
