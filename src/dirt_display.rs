@@ -114,7 +114,7 @@ pub fn display_dirt(
                 id_line.push_str(&format!(" {}  ", n));
             }
         }
-        full_str.push_str(&format!("\n{}\n\n", id_line));
+        full_str.push_str(&format!("{}\n", id_line));
 
         if single_id {
             // Only display the most recent message (msg)
