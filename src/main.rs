@@ -231,7 +231,7 @@ fn main() {
         }
     }
 
-    let WINDOW_SIZE: usize = 64;
+    let WINDOW_SIZE: usize = 128;
     let TIME_WINDOW_SIZE: usize = 10;
     let args: Vec<String> = env::args().collect();
     let usage = format!("Usage {} IP:PORT", &args[0]);
@@ -337,7 +337,13 @@ fn main() {
 
                 bytes_recieved_in_sec = bytes_recieved_in_sec + size;
                 
-                let (_, packet) = rosc::decoder::decode_udp(&buf[..size]).unwrap();
+                let (_, packet) = match rosc::decoder::decode_udp(&buf[..size]) {
+                    Ok(result) => result,
+                    Err(_) => {
+                        print!("?");
+                        continue;
+                    }
+                };
                 
                 // Process the packet with the shared data structures
                 let mut window_lock = msg_window.lock().unwrap();

@@ -100,9 +100,9 @@ pub fn display_dirt(
             full_str.push_str(msg.display_f32("cycle", |f| display_cycle(f, cols)).as_str());
         }
 
-        // Display the current cps and ms_per_cycle values
-        full_str.push_str(&format!("cps: {:.2} | ms per cycle: {:.0}\n\n", 
-            cycle_info.last_cps, cycle_info.ms_per_cycle));
+        // // Display the current cps and ms_per_cycle values
+        // full_str.push_str(&format!("cps: {:.2}\n\n", 
+        //     cycle_info.last_cps));
 
         // Display ids '1' through '9' across the top, with the most recent id(s) in braces if should_show_braces is true
         let mut id_line = String::new();
@@ -205,7 +205,7 @@ pub fn display_dirt(
             }
         }
 
-        full_str.push_str(msg.display_raw().as_str());
+        // full_str.push_str(msg.display_raw().as_str());
     } else {
         full_str.push_str("Some(msg) = dirt_window.front() failed???")
     }
